@@ -97,6 +97,13 @@ impl std::str::FromStr for MoveString {
 }
 
 /// A parsed gamestring that resolves to a valid game of LITS.
+/// 
+/// Caveat: the game need not actually be semantically valid, only syntactically;
+/// it is possible to receive a gamestring in which any given move is not a legal
+/// continuation of the board state obtained by the gamestring preceding that move.
+/// 
+/// To ensure a gamestring is actually valid, its moves should be tried 
+/// iteratively against Board::play().
 #[derive(Clone, Debug)]
 pub struct GameString {
     pub setup: SetupString,
