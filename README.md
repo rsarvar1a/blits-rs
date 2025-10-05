@@ -23,3 +23,8 @@ touch .env
 ```sh
 target/release/blits --help
 ```
+
+## stats
+
+- prototype: `5.25 kN/s` (no evaluator)
+- best effort: `1.35 MN/s` (no evaluator)

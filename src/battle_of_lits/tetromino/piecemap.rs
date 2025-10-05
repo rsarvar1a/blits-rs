@@ -27,7 +27,7 @@ pub enum Interaction {
 /// Precomputed data for pairwise interactions between pieces on the board.
 #[derive(Clone, Debug)]
 pub struct PieceMap {
-    forward: Vec<Tetromino>,
+    forward: Box<[Tetromino; NUM_PIECES]>,
     reverse: HashMap<[OffsetCoord; 4], usize>,
     associations: Vec<Vec<Interaction>>,
     associations_specific: [[MoveSet; 3]; NUM_PIECES] // self.assoc_specific[mv_index][interaction.value] = set of moves that match
@@ -36,26 +36,28 @@ pub struct PieceMap {
 impl PieceMap {
     /// Creates a new PieceMap.
     pub fn new() -> PieceMap {
-        let mut tetrominos = Vec::with_capacity(NUM_PIECES);
+        let mut tetrominos = [Tetromino::default(); NUM_PIECES];
+        let mut i = 0;
 
         Tile::all().iter().for_each(|kind| {
             (0..10).cartesian_product(0..10).map(|(row, col)| Coord { row, col }).for_each(|anchor| {
                 Tetromino::identity(*kind, &anchor).enumerate().iter().for_each(|isomorph| {
                     if isomorph.in_bounds() {
-                        tetrominos.push(*isomorph);
+                        unsafe { *tetrominos.get_unchecked_mut(i) = *isomorph };
+                        i += 1;
                     }
                 });
             });
         });
 
         let forward = tetrominos;
-        let reverse = forward.iter().enumerate().map(|(i, piece)| (piece.real_coords(), i)).collect::<HashMap<[OffsetCoord; 4], usize>>();
+        let reverse = forward.iter().enumerate().map(|(i, piece): (usize, &Tetromino)| (piece.real_coords(), i)).collect::<HashMap<[OffsetCoord; 4], usize>>();
         let mut associations = vec![vec![Interaction::Conflicting; NUM_PIECES]; NUM_PIECES];
 
         for i in 0..NUM_PIECES {
             for j in (i + 1)..NUM_PIECES {
                 let [lhs, rhs] = [forward[i], forward[j]];
-                let [l_coords, r_coords] = [lhs, rhs].map(|p| p.real_coords().into_iter().collect::<HashSet<OffsetCoord>>());
+                let [l_coords, r_coords] = [lhs, rhs].map(|p: Tetromino| p.real_coords().into_iter().collect::<HashSet<OffsetCoord>>());
 
                 // 1. do the pieces intersect?
                 if l_coords.intersection(&r_coords).cloned().collect::<BTreeSet<_>>().len() > 0 {
@@ -65,7 +67,7 @@ impl PieceMap {
 
                 // 2. do the pieces have no neighbouring tiles?
                 if ! l_coords.iter().any(|l| {
-                    r_coords.iter().any(|r| r.neighbours(*l))
+                    r_coords.iter().any(|r: &OffsetCoord| r.neighbours(*l))
                 }) {
                     associations[i][j] = Interaction::Neutral;
                     continue;
@@ -98,27 +100,35 @@ impl PieceMap {
             })
         }).collect_array::<NUM_PIECES>().unwrap();
 
-        PieceMap { forward, reverse, associations, associations_specific }
+        PieceMap { forward: Box::new(forward), reverse, associations, associations_specific }
     }
 
     /// Gets the interaction between two pieces by ID.
     pub fn get_association(&self, i: usize, j: usize) -> Interaction {
-        self.associations[i.min(j)][i.max(j)]
+        let [r, c] = [i.min(j), i.max(j)];
+        unsafe { 
+            *self.associations.get_unchecked(r).get_unchecked(c)
+        }
     }
 
     /// Gets the piece type by ID.
     pub fn get_kind(&self, id: usize) -> Tile {
-        self.forward[id].kind
+        unsafe {
+            self.forward.get_unchecked(id).kind
+        }
     }
 
     /// Gets the piece ID of a given tetromino.
     pub fn get_id(&self, tetromino: &Tetromino) -> usize {
-        self.reverse[&tetromino.real_coords()]
+        let idx = tetromino.real_coords();
+        self.reverse[&idx]
     } 
 
     /// Gets a piece by ID.
     pub fn get_piece(&self, id: usize) -> &Tetromino {
-        &self.forward[id]
+        unsafe {
+            self.forward.get_unchecked(id)
+        }
     }
 
     /// Notates a piece by ID.
@@ -151,7 +161,9 @@ impl PieceMap {
 
     /// Gets the interactions on a piece matching a certain outcome.
     pub fn with_interaction(&self, id: usize, interaction: Interaction) -> &MoveSet {
-        &self.associations_specific[id][interaction as usize]
+        unsafe {
+            self.associations_specific.get_unchecked(id).get_unchecked(interaction as usize)
+        }
     }
 }
 

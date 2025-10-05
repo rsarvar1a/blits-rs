@@ -75,12 +75,16 @@ impl<'a> Board<'a> {
     }
 
     /// Unchecked accessor into the grid; engine use only.
-    pub(super) fn get_unchecked(&self, coord: &Coord) -> BoardCell {
-        self.cells.0[coord.row][coord.col]
+    pub(super) fn get_unchecked(&self, coord: &Coord) -> &BoardCell {
+        unsafe {
+            self.cells.0.get_unchecked(coord.row).get_unchecked(coord.col)
+        }
     }
 
     /// Unchecked mutable reference into the grid; engine use only.
     pub(super) fn get_mut_unchecked(&mut self, coord: &Coord) -> &mut BoardCell {
-        &mut self.cells.0[coord.row][coord.col]
+        unsafe {
+            self.cells.0.get_unchecked_mut(coord.row).get_unchecked_mut(coord.col)
+        }
     }
 }

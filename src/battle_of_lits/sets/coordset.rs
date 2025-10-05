@@ -31,7 +31,7 @@ impl CoordSet {
     }
 }
 
-impl SetOps<Coord> for CoordSet {
+impl SetOps<&Coord, Coord> for CoordSet {
     fn len(&self) -> usize {
         self.iter().count()
     }

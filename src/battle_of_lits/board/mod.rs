@@ -105,9 +105,7 @@ impl<'a> Board<'a> {
 
     /// Determines whether or not the state is terminal.
     pub fn is_terminal(&self) -> bool {
-        let mut mvs = vec![];
-        self._compute_valid_moves(&mut mvs);
-        mvs.len() == 0
+        !self._any_valid_move()
     }
 
     /// Returns a new board. If a symbol map is provided, use it, otherwise generate one.
@@ -130,7 +128,7 @@ impl<'a> Board<'a> {
             edge_mask: EdgeCounter::default(),
             foursquare_mask: FoursquareCounter::default(),
             piece_bag: [PIECES_PER_KIND; 4],
-            history: vec![],
+            history: Vec::with_capacity(20),
             swapped: false,
             player_to_move: Player::X,
             zobrist_hash: Board::initial_zobrist_hash(&cells),
@@ -220,7 +218,7 @@ impl<'a> Board<'a> {
 
     /// Plays a move on this board, if valid.
     pub fn play(&mut self, mv: usize) -> Result<()> {
-        if self.valid_moves_set().contains(&mv) {
+        if self.valid_moves_set().contains(mv) {
             self.play_unchecked(&self.piecemap.get_piece(mv), mv);
             Ok(())
         } else {

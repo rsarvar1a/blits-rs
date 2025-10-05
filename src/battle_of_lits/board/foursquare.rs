@@ -22,7 +22,9 @@ impl FoursquareCounter {
     /// Determines how many tiles are in the foursquare anchored (topleft) at the given coordinate.
     #[inline]
     pub fn count(&self, coord: &Coord) -> u8 {
-        self.0[coord.row][coord.col]
+        unsafe { 
+            *self.0.get_unchecked(coord.row).get_unchecked(coord.col)
+        }
     }
 
     /// Updates the foursquare population count on all foursquares touching a given tile.
@@ -78,19 +80,14 @@ impl FoursquareCounter {
     /// Increments the given counter in-place.
     #[inline]
     fn incr_inplace(&mut self, coord: &Coord) -> () {
-        let new_count = self.count(coord) + 1;
-        self.write(coord, new_count);
+        let el = unsafe { self.0.get_unchecked_mut(coord.row).get_unchecked_mut(coord.col) };
+        *el += 1;
     }
 
     /// Decrements the given counter in-place.
     #[inline]
     fn decr_inplace(&mut self, coord: &Coord) -> () {
-        let new_count = self.count(coord) - 1;
-        self.write(coord, new_count);
-    }
-
-    #[inline]
-    fn write(&mut self, coord: &Coord, value: u8) -> () {
-        self.0[coord.row][coord.col] = value;
+        let el = unsafe { self.0.get_unchecked_mut(coord.row).get_unchecked_mut(coord.col) };
+        *el -= 1;
     }
 }

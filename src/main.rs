@@ -21,6 +21,8 @@ fn main() -> Result<!> {
 
     // Serve LTP and the BLITS engine.
     let piecemap = Box::leak(Box::new(PieceMap::new()));
+    log::info!("ready");
+    
     let Err(e) = LTPServer::new(options, piecemap).run();
     log::error!("fatal error: {}", e);
     Err(e)

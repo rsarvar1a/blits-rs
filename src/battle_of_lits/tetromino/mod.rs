@@ -16,6 +16,18 @@ pub struct Tetromino {
     pub transform: Transform,
 }
 
+impl Default for Tetromino {
+    fn default() -> Self {
+        Tetromino { 
+            kind: Tile::L, 
+            anchor: Coord::new(0, 0), 
+            points: [OffsetCoord::new(0, 0); 4],
+            real_coords: [OffsetCoord::new(0, 0); 4],
+            transform: Transform::Identity__ 
+        }
+    }
+}
+
 impl std::cmp::PartialEq for Tetromino {
     fn eq(&self, other: &Self) -> bool {
         if self.kind != other.kind || self.transform != other.transform { // skip the expensive work if we can

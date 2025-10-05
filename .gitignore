@@ -4,6 +4,7 @@
 .env
 
 # perf-related artifacts
+perf/
 perf.data
 perf.data.old
 flamegraph.svg
