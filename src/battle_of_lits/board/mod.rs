@@ -1,7 +1,6 @@
 pub(crate) mod board_cell;
 pub(crate) mod foursquare;
 pub(crate) mod indexing;
-pub(crate) mod masks;
 pub(crate) mod moves;
 pub(crate) mod neighbours;
 pub(crate) mod scores;
@@ -13,7 +12,6 @@ use super::prelude::*;
 
 use board_cell::BoardCell;
 use foursquare::FoursquareCounter;
-use masks::Mask;
 use neighbours::EdgeCounter;
 
 
@@ -78,11 +76,6 @@ pub struct Board<'a> {
 }
 
 impl<'a> Board<'a> {
-    /// Returns a mask of all covered cells on the grid.
-    pub fn covered(&self) -> Mask {
-        self._covered()
-    }
-
     /// Determines if the gamestate is such that O can swap.
     pub fn can_swap(&self) -> bool {
         self.swapped == false && self.history.len() == 1

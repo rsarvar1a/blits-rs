@@ -40,6 +40,7 @@ impl<'a> Board<'a> {
         self.get_unchecked(coord).lits_value()
     }
 
+    #[allow(dead_code)]
     /// Unchecked setting of a cell in the grid; engine use only.
     pub(super) fn set_cell_unchecked(
         &mut self,

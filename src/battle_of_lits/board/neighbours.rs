@@ -15,23 +15,6 @@ impl LITSEdgeCount {
         ((self.0 >> (tile as u16 * LITSEdgeCount::OFFSET)) & LITSEdgeCount::EXTENT) as u8
     }
 
-    /// Determines whether or not the cell shares an edge with a tile of the given type.
-    pub fn touches(&self, tile: Tile) -> bool {
-        self.count(tile) > 0
-    }
-
-    /// Produces a counter with the given tile incremented.
-    pub fn incr(&self, tile: Tile) -> LITSEdgeCount {
-        let new_count = self.count(tile) + 1;
-        self.produce(tile, new_count)
-    }
-
-    /// Produces a counter with the given tile decremented.
-    pub fn decr(&self, tile: Tile) -> LITSEdgeCount {
-        let new_count = self.count(tile) - 1;
-        self.produce(tile, new_count)
-    }
-
     /// Increments the given counter in-place.
     pub fn incr_inplace(&mut self, tile: Tile) -> &mut Self {
         let new_count = self.count(tile) + 1;
@@ -44,13 +27,6 @@ impl LITSEdgeCount {
         let new_count = self.count(tile) - 1;
         self.update(tile, new_count);
         self
-    }
-
-    /// Produces a new ref counter with the given tile changed to a new value.
-    fn produce(&self, tile: Tile, value: u8) -> LITSEdgeCount {
-        let mut new = self.clone();
-        new.update(tile, value);
-        new
     }
 
     fn update(&mut self, tile: Tile, value: u8) -> () {
@@ -71,18 +47,6 @@ pub struct EdgeCounter {
 }
 
 impl EdgeCounter {
-    /// Determines whether a given coordinate has an edge at all.
-    pub fn has_any_edge(&self, coord: &Coord) -> bool {
-        [Tile::L, Tile::I, Tile::T, Tile::S]
-            .iter()
-            .any(|v| self.touches_unchecked(coord, *v))
-    }
-
-    /// Determines whether a given coordinate touches the edge of a tile of the given type.
-    pub fn touches_unchecked(&self, coord: &Coord, tile: Tile) -> bool {
-        self.counters[coord.row][coord.col].touches(tile)
-    }
-
     /// Updates the tile counts on the neighbours of a given tile.
     pub fn update(
         &mut self,

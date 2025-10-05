@@ -1,6 +1,5 @@
 use crate::battle_of_lits::{prelude::*, tetromino::piecemap::Interaction};
 
-const DEFAULT_ANCHOR: usize = 1;
 const GAME_LENGTH_LOWER_BOUND: usize = 10;
 
 impl<'a> Board<'a> {

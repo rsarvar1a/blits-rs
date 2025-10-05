@@ -11,6 +11,7 @@ pub struct LTPServer {
     agent: BLITSAgent,
     board: Option<Board<'static>>,
     piecemap: &'static PieceMap,
+    #[allow(dead_code)]
     config: LTPServerOptions,
     dirty: bool,
 }

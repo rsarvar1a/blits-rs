@@ -1,15 +1,7 @@
 
-use std::ops::Range;
-
 use itertools::Itertools;
 
 use crate::battle_of_lits::prelude::*;
-
-
-const RANGE_L: Range<usize> = 0..576;
-const RANGE_I: Range<usize> = 576..(576+140);
-const RANGE_T: Range<usize> = (576+140)..(576+140+288);
-const RANGE_S: Range<usize> = (576+140+288)..NUM_PIECES;
 
 
 /// The exact natura in which two pieces interact on the board.

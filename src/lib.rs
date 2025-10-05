@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 #![feature(never_type)]
 #![feature(impl_trait_in_assoc_type)]
 
