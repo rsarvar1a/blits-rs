@@ -1,0 +1,172 @@
+
+use std::ops::Range;
+
+use itertools::Itertools;
+
+use crate::battle_of_lits::prelude::*;
+
+
+const RANGE_L: Range<usize> = 0..576;
+const RANGE_I: Range<usize> = 576..(576+140);
+const RANGE_T: Range<usize> = (576+140)..(576+140+288);
+const RANGE_S: Range<usize> = (576+140+288)..NUM_PIECES;
+
+
+/// The exact natura in which two pieces interact on the board.
+/// - Conflicting - pieces that overlap, or two tiles of the same type that are adjacent
+/// - Neutral - pieces that are not adjacent
+/// - Adjacent - pieces that are adjacent and not of the same type 
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Interaction {
+    Conflicting = 0,
+    Neutral = 1,
+    Adjacent = 2
+}
+
+/// Precomputed data for pairwise interactions between pieces on the board.
+#[derive(Clone, Debug)]
+pub struct PieceMap {
+    forward: Vec<Tetromino>,
+    reverse: HashMap<[OffsetCoord; 4], usize>,
+    associations: Vec<Vec<Interaction>>,
+    associations_specific: [[FastSet; 3]; NUM_PIECES] // self.assoc_specific[mv_index][interaction.value] = set of moves that match
+}
+
+impl PieceMap {
+    /// Creates a new PieceMap.
+    pub fn new() -> PieceMap {
+        let mut tetrominos = Vec::with_capacity(NUM_PIECES);
+
+        Tile::all().iter().for_each(|kind| {
+            (0..10).cartesian_product(0..10).map(|(row, col)| Coord { row, col }).for_each(|anchor| {
+                Tetromino::identity(*kind, &anchor).enumerate().iter().for_each(|isomorph| {
+                    if isomorph.in_bounds() {
+                        tetrominos.push(*isomorph);
+                    }
+                });
+            });
+        });
+
+        let forward = tetrominos;
+        let reverse = forward.iter().enumerate().map(|(i, piece)| (piece.real_coords(), i)).collect::<HashMap<[OffsetCoord; 4], usize>>();
+        let mut associations = vec![vec![Interaction::Conflicting; NUM_PIECES]; NUM_PIECES];
+
+        for i in 0..NUM_PIECES {
+            for j in (i + 1)..NUM_PIECES {
+                let [lhs, rhs] = [forward[i], forward[j]];
+                let [l_coords, r_coords] = [lhs, rhs].map(|p| p.real_coords().into_iter().collect::<HashSet<OffsetCoord>>());
+
+                // 1. do the pieces intersect?
+                if l_coords.intersection(&r_coords).cloned().collect::<BTreeSet<_>>().len() > 0 {
+                    associations[i][j] = Interaction::Conflicting;
+                    continue;
+                }
+
+                // 2. do the pieces have no neighbouring tiles?
+                if ! l_coords.iter().any(|l| {
+                    r_coords.iter().any(|r| r.neighbours(*l))
+                }) {
+                    associations[i][j] = Interaction::Neutral;
+                    continue;
+                }
+
+                // 3. are the pieces adjacent and of the same type?
+                if lhs.kind == rhs.kind {
+                    associations[i][j] = Interaction::Conflicting;
+                    continue;
+                }
+
+                // 4. do these two pieces alone violate the foursquare rule?
+                let cover = l_coords.union(&r_coords).cloned().collect::<HashSet<_>>();
+                if cover.iter().any(|c| {
+                    cover.contains(&OffsetCoord { rows: c.rows + 1, cols: c.cols })
+                        && cover.contains(&OffsetCoord { rows: c.rows, cols: c.cols + 1 })
+                        && cover.contains(&OffsetCoord { rows: c.rows + 1, cols: c.cols + 1 })
+                }) {
+                    associations[i][j] = Interaction::Conflicting;
+                    continue;
+                }
+
+                associations[i][j] = Interaction::Adjacent;
+            }
+        }
+
+        let associations_specific: [[FastSet; 3]; NUM_PIECES] = (0..NUM_PIECES).map(|idx| {
+            [Interaction::Conflicting, Interaction::Neutral, Interaction::Adjacent].map(|int| {
+                (0..NUM_PIECES).filter(|&p| associations[idx.min(p)][idx.max(p)] == int).collect()
+            })
+        }).collect_array::<NUM_PIECES>().unwrap();
+
+        PieceMap { forward, reverse, associations, associations_specific }
+    }
+
+    /// Gets the interaction between two pieces by ID.
+    pub fn get_association(&self, i: usize, j: usize) -> Interaction {
+        self.associations[i.min(j)][i.max(j)]
+    }
+
+    /// Gets the piece type by ID.
+    pub fn get_kind(&self, id: usize) -> Tile {
+        self.forward[id].kind
+    }
+
+    /// Gets the piece ID of a given tetromino.
+    pub fn get_id(&self, tetromino: &Tetromino) -> usize {
+        self.reverse[&tetromino.real_coords()]
+    } 
+
+    /// Gets a piece by ID.
+    pub fn get_piece(&self, id: usize) -> &Tetromino {
+        &self.forward[id]
+    }
+
+    /// Notates a piece by ID.
+    pub fn notate(&self, id: usize) -> String {
+        match id {
+            NULL_MOVE => "swap".into(),
+            _         => self.get_piece(id).notate()
+        }
+    }
+
+    /// Tries to find the given set of coords in the table.
+    pub fn try_and_find(&self, coords: &[OffsetCoord; 4]) -> Result<usize> {
+        let mut coords = coords.clone();
+        coords.sort();
+        if self.reverse.contains_key(&coords) {
+            Ok(self.reverse[&coords])
+        } else {
+            Err(anyhow!("could not match a Tetromino to coords {coords:?}"))
+        }
+    }
+
+    /// Tries to map the ID to a tetromino.
+    pub fn try_by_id(&self, id: usize) -> Result<&Tetromino> {
+        if id < NUM_PIECES {
+            Ok(self.get_piece(id))
+        } else {
+            Err(anyhow!("id {id} out of range"))
+        }
+    }
+
+    /// Gets the interactions on a piece matching a certain outcome.
+    pub fn with_interaction(&self, id: usize, interaction: Interaction) -> &FastSet {
+        &self.associations_specific[id][interaction as usize]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Instant;
+    use crate::battle_of_lits::consts::NUM_PIECES;
+    use super::PieceMap;
+
+    #[test]
+    fn ensure_builds() {
+        let timer = Instant::now();
+        let piece_map = PieceMap::new();
+        assert_eq!(piece_map.reverse.len(), NUM_PIECES);
+        let elapsed = Instant::now() - timer;
+        println!("took {}s", elapsed.as_secs());
+    }
+}

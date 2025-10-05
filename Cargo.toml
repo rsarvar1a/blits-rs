@@ -1,0 +1,37 @@
+[package]
+name = "blits-rs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.100"
+clap = { version = "4.5.48", features = ["derive"] }
+dotenvy = "0.15.7"
+fastset = "0.5.2"
+flexi_logger = "0.31.4"
+itertools = "0.14.0"
+log = "0.4.28"
+minimax = { git = "https://github.com/edre/minimax-rs", rev = "bb04bc3ca4623545fbe3c31603335b9138ba50ca" }
+primitive-types = "0.14.0"
+regex = "1.11.3"
+
+[[bin]]
+name = "blits"
+path = "src/main.rs"
+
+[lib]
+name = "lib_blits"
+path = "src/lib.rs"
+
+
+[profile.dev]
+incremental = true
+
+[profile.perft]
+inherits = "release"
+debug = 1
+overflow-checks = false
+opt-level = 2
+
+[profile.release]
+lto = 'thin'

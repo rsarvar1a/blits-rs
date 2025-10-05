@@ -1,0 +1,86 @@
+use super::BoardCell;
+use crate::battle_of_lits::prelude::*;
+
+impl<'a> Board<'a> {
+    /// Gets the board cell at a given coordinate.
+    pub(super) fn get(&self, coord: &Coord) -> Result<BoardCell> {
+        if coord.in_bounds() {
+            Ok(self.cells.0[coord.row][coord.col])
+        } else {
+            Err(anyhow!(
+                "invalid coordinate ({:02}, {:02})",
+                coord.row,
+                coord.col
+            ))
+        }
+    }
+
+    /// Gets a mutable reference to the board cell at a given coordinate.
+    pub(super) fn get_mut(&mut self, coord: &Coord) -> Result<&mut BoardCell> {
+        if coord.in_bounds() {
+            Ok(&mut self.cells.0[coord.row][coord.col])
+        } else {
+            Err(anyhow!(
+                "invalid coordinate ({:02}, {:02})",
+                coord.row,
+                coord.col
+            ))
+        }
+    }
+}
+
+impl<'a> Board<'a> {
+    /// Unchecked cell value in the grid; engine use only.
+    pub(super) fn cell_unchecked(&self, coord: &Coord) -> Option<Player> {
+        self.get_unchecked(coord).cell_value()
+    }
+
+    /// Unchecked lits value in the grid; engine use only.
+    pub(super) fn lits_unchecked(&self, coord: &Coord) -> Option<Tile> {
+        self.get_unchecked(coord).lits_value()
+    }
+
+    /// Unchecked setting of a cell in the grid; engine use only.
+    pub(super) fn set_cell_unchecked(
+        &mut self,
+        coord: &Coord,
+        cell: Option<Player>,
+    ) -> &mut Self {
+        let [prev, new] = {
+            let r = self.get_mut_unchecked(coord);
+            let prev = r.clone();
+            *r = r.with_cell(cell);
+            [prev, r.clone()]
+        };
+        self.zobrist_hash ^= Board::cell_hash(coord.row, coord.col, prev);
+        self.zobrist_hash ^= Board::cell_hash(coord.row, coord.col, new);
+        self
+    }
+
+    /// Unchecked setting of a LITS tile in the grid; engine use only.
+    pub(super) fn set_lits_unchecked(
+        &mut self,
+        coord: &Coord,
+        lits: Option<Tile>,
+    ) -> &mut Self {
+        let [cur, prev] = {
+            let r = self.get_mut_unchecked(coord);
+            let prev = r.lits_value();
+            *r = r.with_lits(lits);
+            [r.lits_value(), prev]
+        };
+        self.edge_mask.update_unchecked(coord, cur, prev);
+        self.foursquare_mask.update_unchecked(coord, cur);
+        self
+    }
+
+    /// Unchecked accessor into the grid; engine use only.
+    pub(super) fn get_unchecked(&self, coord: &Coord) -> BoardCell {
+        self.cells.0[coord.row][coord.col]
+    }
+
+    /// Unchecked mutable reference into the grid; engine use only.
+    pub(super) fn get_mut_unchecked(&mut self, coord: &Coord) -> &mut BoardCell {
+        &mut self.cells.0[coord.row][coord.col]
+    }
+}
