@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 #![feature(never_type)]
+#![feature(impl_trait_in_assoc_type)]
 
 pub mod agent;
 pub mod battle_of_lits;
@@ -9,7 +10,6 @@ pub mod utils {
     pub mod prelude {
         pub use anyhow::{anyhow, Context, Error};
         pub type Result<T> = anyhow::Result<T, Error>;
-        pub use fastset::Set as FastSet;
         pub use primitive_types::U256;
 
         pub use std::{

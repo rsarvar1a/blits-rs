@@ -74,7 +74,7 @@ pub struct Board<'a> {
     zobrist_hash: u64,
 
     /// A cache of valid moves for the previous position (i.e. lacking the most recently played move).
-    _valid_moves_cache: [Option<FastSet>; PIECES_PER_KIND * 4 + 1]
+    _valid_moves_cache: [Option<MoveSet>; PIECES_PER_KIND * 4 + 1]
 }
 
 impl<'a> Board<'a> {
@@ -101,6 +101,13 @@ impl<'a> Board<'a> {
     /// Determines the tile covering the cell at a given row and column on the board, if any tile exists.
     pub fn lits(&self, coord: &Coord) -> Result<Option<Tile>> {
         self.get(coord).map(|v: BoardCell| v.lits_value())
+    }
+
+    /// Determines whether or not the state is terminal.
+    pub fn is_terminal(&self) -> bool {
+        let mut mvs = vec![];
+        self._compute_valid_moves(&mut mvs);
+        mvs.len() == 0
     }
 
     /// Returns a new board. If a symbol map is provided, use it, otherwise generate one.
@@ -130,7 +137,7 @@ impl<'a> Board<'a> {
             _valid_moves_cache: [const { None }; PIECES_PER_KIND * 4 + 1]
         };
 
-        b._valid_moves_cache[0] = Some(FastSet::from_iter(0..NUM_PIECES)); 
+        b._valid_moves_cache[0] = Some(MoveSet::from_iter(0..NUM_PIECES)); 
         b
     }
 
@@ -140,24 +147,28 @@ impl<'a> Board<'a> {
         if mv == NULL_MOVE { 
             return 6; // the swap is always noisy, just because we want to encourage exploring it
         }
+
         let piece = self.piecemap.get_piece(mv);
-        let true_coverage = piece.real_coords().iter().map(|c| {
+
+        let true_coverage = piece.real_coords_lazy().map(|c| {
             let Coord { row, col } = c.coerce();
             self.cells.0[row][col].cell_value().map_or(0, |v| -v.perspective()) // covering a player's tile is scoring for the opposite player
         }).sum::<i32>();
+
         let true_protection = {
             let mut foursquare = self.foursquare_mask.clone();
-            for coord in piece.real_coords() {
+            for coord in piece.real_coords_lazy() {
                 foursquare.update_unchecked(&coord.coerce(), Some(piece.kind));
             }
             piece.neighbours().iter().map(|c| { // the on-board neighbours of this piece
-                if self.lits_unchecked(c).is_some() { // this is covered by a different tile, so it's not protected 
+                if self.lits_unchecked(&c).is_some() { // this is covered by a different tile, so it's not protected 
                     return 0;
                 }
                 // uncovered tile scores in favour of the owning player, obviously
-                foursquare.three(c) as i32 * self.cell_unchecked(c).map_or(0, |v| v.perspective())
+                foursquare.three(&c) as i32 * self.cell_unchecked(&c).map_or(0, |v| v.perspective())
             }).sum::<i32>()
         };
+
         let score = (true_coverage + true_protection) * self.player_to_move.perspective();
         score
     }
@@ -167,10 +178,8 @@ impl<'a> Board<'a> {
     /// Greedy moves are pieces that cover & protect extremely favourably for the current player.
     /// 
     /// If the swap is available, always returns it.
-    pub fn noisy_moves(&self) -> FastSet {
-        self.valid_moves().into_iter().filter(|&mv| {
-            self.noise(*mv) >= 3
-        }).collect()
+    pub fn noisy_moves(&self, moves: &mut Vec<usize>) {
+        self._compute_noisy_moves(moves);
     }
 
     /// Returns the full gamestring for this board. If a swap was played, the gamestring is mindful of this fact,
@@ -185,7 +194,7 @@ impl<'a> Board<'a> {
                 fragments.push("swap".into());
             }
         }
-        fragments.join(";")
+        fragments.join("; ")
     }
 
     /// Implements the swap rule.
@@ -211,7 +220,7 @@ impl<'a> Board<'a> {
 
     /// Plays a move on this board, if valid.
     pub fn play(&mut self, mv: usize) -> Result<()> {
-        if self.valid_moves().contains(&mv) {
+        if self.valid_moves_set().contains(&mv) {
             self.play_unchecked(&self.piecemap.get_piece(mv), mv);
             Ok(())
         } else {
@@ -299,8 +308,8 @@ impl<'a> Board<'a> {
 
     /// Returns a set of valid moves in the current position. Does so using _m a g i c_, computing 99% of
     /// validity checks in constant time and saving n-piece foursquare detection for last.
-    pub fn valid_moves(&self) -> &FastSet {
-        self._valid_moves_cache[self.history.len()].as_ref().unwrap()
+    pub fn valid_moves(&self, moves: &mut Vec<usize>) {
+        self._compute_valid_moves(moves);
     }
 
     /// Gets a hash for the position. Since the searcher maintains an instance over

@@ -1,38 +1,30 @@
+use itertools::Itertools;
+
 use crate::battle_of_lits::{prelude::*, tetromino::piecemap::Interaction};
 
 const DEFAULT_ANCHOR: usize = 1;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Move {
-    pub tetromino: Tetromino,
-    pub score: isize
-}
 
 impl<'a> Board<'a> {
     /// Plays a move onto the board unchecked; engine use only.
     pub(super) fn play_unchecked(&mut self, tetromino: &Tetromino, id: usize) -> () {
         self.piece_bag[tetromino.kind as usize] -= 1;
-        tetromino.real_coords().iter().for_each(|c| {
+        tetromino.real_coords_lazy().for_each(|c| {
             self.set_lits_unchecked(&c.coerce(), Some(tetromino.kind));
         });
         self.zobrist_hash ^= self.move_hash(id); // add the move to the hash
         self.history.push(id);
         self.next_player();
-
-        self._valid_moves_cache[self.history.len()] = Some(self._compute_valid_moves());
     }
 
     /// Removes a tetromino from the board unchecked; engine use only.
     pub(super) fn undo_unchecked(&mut self, tetromino: &Tetromino, id: usize) -> () {
         self.piece_bag[tetromino.kind as usize] += 1;
-        tetromino.real_coords().iter().for_each(|c| {
+        tetromino.real_coords_lazy().for_each(|c| {
             self.set_lits_unchecked(&c.coerce(), None);
         });
         self.zobrist_hash ^= self.move_hash(id); // remove the move from the hash
         self.history.pop();
         self.next_player();
-
-        self._valid_moves_cache[self.history.len() + 1] = None;
     }
 
     /// Swaps the position by:
@@ -48,15 +40,13 @@ impl<'a> Board<'a> {
         });
         self.swapped = !self.swapped;
         self.next_player();
-
-        self._valid_moves_cache[self.history.len()] = Some(self._compute_valid_moves());
     }
 
     pub(super) fn next_player(&mut self) -> () {
         self.player_to_move = -self.player_to_move;
     }
 
-    pub(super) fn _compute_valid_moves(&self) -> FastSet {
+    pub fn valid_moves_set(&self) -> MoveSet {
         match self.history.len() {
             0 => { 
                 return (0..NUM_PIECES).into_iter().collect(); 
@@ -64,56 +54,151 @@ impl<'a> Board<'a> {
             1 => { 
                 let mut mvs = self.piecemap.with_interaction(self.history[0], Interaction::Adjacent).clone();
                 if !self.swapped { // need to signal the validity of a pass so the null-move optimization can actually use it
-                    mvs.insert(NULL_MOVE); 
+                    mvs.insert(&NULL_MOVE); 
                 }
                 return mvs;
             },
             _ => { /* don't return; compute properly! */ },
         };
 
-        let history: FastSet = self.history.iter().cloned().collect();        
+        let history: MoveSet = self.history.iter().collect();
+        let mut valid_moves: MoveSet = MoveSet::default();
 
-        let initially_valid = {
-            if let Some(previously_valid_moves) = &self._valid_moves_cache[self.history.len() - 1] {
-                let prev = self.history.last().unwrap();
+        history.iter() // insert adjacencies to current history
+            .map(|p| self.piecemap.with_interaction(p, Interaction::Adjacent))
+            .for_each(|set| { valid_moves.union_inplace(set); });  
+        
+        history.iter() // remove conflicts with current history
+            .map(|p| self.piecemap.with_interaction(p, Interaction::Conflicting))
+            .for_each(|set| { valid_moves.difference_inplace(set); });
+        
+        valid_moves.difference_inplace(&history); // remove played moves
 
-                let keep_from_prev: FastSet = previously_valid_moves.into_iter().filter(|&mv| {
-                    *mv != NULL_MOVE && self.piecemap.get_association(*mv, *prev) != Interaction::Conflicting
-                }).collect();
-                
-                let adjacent_to_prev_and_not_conflicting: FastSet = self.piecemap.with_interaction(*prev, Interaction::Adjacent).into_iter().filter(|&adj| {
-                    (!history.contains(adj)) && (!history.iter().any(|&hist| { 
-                        self.piecemap.get_association(*adj, hist) == Interaction::Conflicting
-                    }))
-                }).collect();
+        valid_moves
+            .iter().filter(|&p| {
+                // we drop pieces not in the bag.
+                let kind = self.piecemap.get_kind(p);
+                if self.piece_bag[kind as usize] == 0 {
+                    return false;
+                }
+                // we also drop pieces that violate foursquare. to do this, we clone the historical
+                // foursquare, simulate the piece, and check all of the refcounts.
+                let mut foursquare = self.foursquare_mask.clone();
+                let piece = self.piecemap.get_piece(p);
+                piece.real_coords_lazy().for_each(|c| {
+                    foursquare.update_unchecked(&c.coerce(), Some(piece.kind));
+                });
+                !piece.real_coords_lazy().any(|c| foursquare.any(&c.coerce()))
+            }).collect()
+    }
 
-                keep_from_prev.union(&adjacent_to_prev_and_not_conflicting)
-            } else {            
-                let conflicts_with_history: FastSet = history.iter()
-                    .flat_map(|&p| self.piecemap.with_interaction(p, Interaction::Conflicting)).collect();
-                
-                let adjacents_with_history: FastSet = history.iter()
-                    .flat_map(|&p| self.piecemap.with_interaction(p, Interaction::Adjacent)).collect();
-                
-                // we can play any move that is adjacent to the current boardstate but that does not
-                // conflict with the boardstate; we also cannot repeat a played move.
-                adjacents_with_history.difference(&history.union(&conflicts_with_history))
-            }
+    pub fn _compute_valid_moves(&self, moves: &mut Vec<usize>) {
+        match self.history.len() {
+            0 => { 
+                moves.extend(0..NUM_PIECES);
+                return;
+            },
+            1 => { 
+                let mvs = self.piecemap.with_interaction(self.history[0], Interaction::Adjacent).clone();
+                moves.extend(mvs.iter());
+                if !self.swapped {
+                    moves.push(NULL_MOVE);
+                }
+                return;
+            },
+            _ => { /* don't return; compute properly! */ },
         };
-        initially_valid.into_iter().filter(|&p| {
-            // we drop pieces not in the bag.
-            let kind = self.piecemap.get_kind(p);
-            if self.piece_bag[kind as usize] == 0 {
-                return false;
-            }
-            // we also drop pieces that violate foursquare. to do this, we clone the historical
-            // foursquare, simulate the piece, and check all of the refcounts.
-            let mut foursquare = self.foursquare_mask.clone();
-            let piece = self.piecemap.get_piece(p);
-            piece.real_coords().iter().for_each(|c| {
-                foursquare.update_unchecked(&c.coerce(), Some(piece.kind));
+
+        let history: MoveSet = self.history.iter().collect();
+        let mut valid_moves: MoveSet = MoveSet::default();
+
+        history.iter() // insert adjacencies to current history
+            .map(|p| self.piecemap.with_interaction(p, Interaction::Adjacent))
+            .for_each(|set| { valid_moves.union_inplace(set); });  
+        
+        history.iter() // remove conflicts with current history
+            .map(|p| self.piecemap.with_interaction(p, Interaction::Conflicting))
+            .for_each(|set| { valid_moves.difference_inplace(set); });
+        
+        valid_moves.difference_inplace(&history); // remove played moves
+
+        valid_moves
+            .iter().filter(|&p| {
+                // we drop pieces not in the bag.
+                let kind = self.piecemap.get_kind(p);
+                if self.piece_bag[kind as usize] == 0 {
+                    return false;
+                }
+                // we also drop pieces that violate foursquare. to do this, we clone the historical
+                // foursquare, simulate the piece, and check all of the refcounts.
+                let mut foursquare = self.foursquare_mask.clone();
+                let piece = self.piecemap.get_piece(p);
+                piece.real_coords_lazy().for_each(|c| {
+                    foursquare.update_unchecked(&c.coerce(), Some(piece.kind));
+                });
+                !piece.real_coords_lazy().any(|c| foursquare.any(&c.coerce()))
+            }).for_each(|p| {
+                moves.push(p);
             });
-            !piece.real_coords().iter().any(|c| foursquare.any(&c.coerce()))
-        }).collect()
+    }
+
+    pub fn _compute_noisy_moves(&self, moves: &mut Vec<usize>) {
+        match self.history.len() {
+            0 => { 
+                let noisy = (0..NUM_PIECES).filter(|mv| {
+                    self.noise(*mv) >= 3
+                });
+                moves.extend(noisy);
+                return;
+            },
+            1 => { 
+                let mvs = self.piecemap
+                    .with_interaction(self.history[0], Interaction::Adjacent)
+                    .iter().filter(|mv| self.noise(*mv) >= 3);
+                moves.extend(mvs);
+                if !self.swapped {
+                    moves.push(NULL_MOVE);
+                }
+                return;
+            },
+            _ => { /* don't return; compute properly! */ },
+        };
+
+        let history: MoveSet = self.history.iter().collect();
+        let mut valid_moves: MoveSet = MoveSet::default();
+
+        history.iter() // insert adjacencies to current history
+            .map(|p| self.piecemap.with_interaction(p, Interaction::Adjacent))
+            .for_each(|set| { valid_moves.union_inplace(set); });  
+        
+        history.iter() // remove conflicts with current history
+            .map(|p| self.piecemap.with_interaction(p, Interaction::Conflicting))
+            .for_each(|set| { valid_moves.difference_inplace(set); });
+        
+        valid_moves.difference_inplace(&history); // remove played moves
+
+        valid_moves
+            .iter().filter(|&p| {
+                // we drop pieces not in the bag.
+                let kind = self.piecemap.get_kind(p);
+                if self.piece_bag[kind as usize] == 0 {
+                    return false;
+                }
+
+                if self.noise(p) < 3 {
+                    return false;
+                }
+
+                // we also drop pieces that violate foursquare. to do this, we clone the historical
+                // foursquare, simulate the piece, and check all of the refcounts.
+                let mut foursquare = self.foursquare_mask.clone();
+                let piece = self.piecemap.get_piece(p);
+                piece.real_coords_lazy().for_each(|c| {
+                    foursquare.update_unchecked(&c.coerce(), Some(piece.kind));
+                });
+                !piece.real_coords_lazy().any(|c| foursquare.any(&c.coerce()))
+            }).for_each(|p| {
+                moves.push(p);
+            });
     }
 }

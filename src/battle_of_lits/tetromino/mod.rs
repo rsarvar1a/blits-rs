@@ -12,6 +12,7 @@ pub struct Tetromino {
     pub kind: Tile,
     pub anchor: Coord,
     pub points: [OffsetCoord; 4],
+    pub real_coords: [OffsetCoord; 4],
     pub transform: Transform,
 }
 
@@ -20,8 +21,8 @@ impl std::cmp::PartialEq for Tetromino {
         if self.kind != other.kind || self.transform != other.transform { // skip the expensive work if we can
             return false;
         }
-        let [lhs, rhs] = [self.real_coords(), other.real_coords()];       // if all four real coords are the same, in any order, we are obviously dealing with the same shape
-        BTreeSet::from(lhs) == BTreeSet::from(rhs) 
+        let [lhs, rhs] = [self.real_coords_lazy(), other.real_coords_lazy()];       // if all four real coords are the same, in any order, we are obviously dealing with the same shape
+        BTreeSet::from_iter(lhs) == BTreeSet::from_iter(rhs) 
     }
 }
 impl std::cmp::Eq for Tetromino {}
@@ -29,7 +30,13 @@ impl std::cmp::Eq for Tetromino {}
 impl Tetromino {
     /// Produces the tetromino obtained by moving this tetromino to the given anchor.
     pub fn at(&self, coord: &Coord) -> Tetromino {
-        Tetromino { kind: self.kind, anchor: *coord, points: self.points, transform: self.transform }
+        Tetromino { 
+            kind: self.kind, 
+            anchor: *coord, 
+            points: self.points, 
+            real_coords: self.points.map(|c| coord + c), 
+            transform: self.transform 
+        }
     }
 
     /// Gives back all tetrominos that result from canonical transformations on this Tetromino's anchor and type.
@@ -41,17 +48,19 @@ impl Tetromino {
 
     /// Constructs the identity tetromino at the given anchor. Makes no guarantees that the tile is in bounds!
     pub fn identity(kind: Tile, anchor: &Coord) -> Tetromino {
+        let template = Tetromino::_identity_template(kind);
         Tetromino {
             kind,
             anchor: *anchor,
-            points: Tetromino::_identity_template(kind),
+            points: template,
+            real_coords: template.map(|c| anchor + c),
             transform: Transform::Identity__,
         }
     }
 
     /// Determines whether or not the tetromino is in bounds.
     pub fn in_bounds(&self) -> bool {
-        self.real_coords().iter().all(|c| c.in_bounds_signed())
+        self.real_coords_lazy().all(|c| c.in_bounds_signed())
     }
 
     /// Gets the base shape corresponding to the tile type as a set of offsets on an anchor point.
@@ -88,14 +97,14 @@ impl Tetromino {
     /// 1. compute the set of neighbours of each point
     /// 2. keep each one that's in-bounds
     /// 3. discard any that's also a coordinate on the piece
-    pub fn neighbours(&self) -> HashSet<Coord> {
-        let inside = self.real_coords().iter().filter_map(|oc| {
+    pub fn neighbours(&self) -> CoordSet {
+        let inside = self.real_coords_lazy().filter_map(|oc| {
             if oc.in_bounds_signed() { 
                 Some(oc.coerce()) 
             } else { 
                 None 
             }
-        }).collect::<HashSet<Coord>>();
+        }).collect::<CoordSet>();
 
         inside.iter().flat_map(|c| {
             ORTHOGONAL_OFFSETS.iter().map(move |offset| {
@@ -106,13 +115,13 @@ impl Tetromino {
                 } else {
                     None
                 }
-            }).collect::<HashSet<Coord>>()
+            }).collect::<CoordSet>()
         }).collect()
     }
 
     /// The canonical notation for the piece; must be in bounds!
     pub fn notate(&self) -> String {
-        let arr = self.real_coords().map(|c| c.coerce().notate()).join(",");
+        let arr = self.real_coords_lazy().map(|c| c.coerce().notate()).join(",");
         format!("{:?}[{}]", self.kind, arr)
     }
 
@@ -121,6 +130,11 @@ impl Tetromino {
         let mut coords = self.points.map(|p| self.anchor + p);
         coords.sort();
         coords
+    }
+
+    /// Gets an iterator to the real coords of a canonical Tetromino.
+    pub fn real_coords_lazy<'a>(&'a self) -> impl Iterator<Item = &'a OffsetCoord> {
+        self.real_coords.iter()
     }
 
     /// Reanchors a tetromino at the given point by:
@@ -133,6 +147,7 @@ impl Tetromino {
             kind: self.kind,
             anchor: (self.anchor + new_focus).coerce(),
             points: self.points.map(|p| p - new_focus),
+            real_coords: self.real_coords,
             transform: self.transform
         }
     }
@@ -159,6 +174,7 @@ impl Tetromino {
             kind, 
             anchor: (anchor + new_focus).coerce(), 
             points: iden.points.map(|p| p - new_focus),
+            real_coords: iden.real_coords,
             transform: Transform::Identity__
         } 
     }
@@ -185,6 +201,12 @@ impl Tetromino {
             return Err(anyhow!("given Tile {kind:?}, but this Tetromino is of type {real_kind:?}"));
         }
 
-        Ok(Tetromino { kind, anchor: Coord::new(0, 0), points: coords.map(|c| c.into()), transform: Transform::Identity__ })
+        Ok(Tetromino {
+            kind, 
+            anchor: Coord::new(0, 0), 
+            points: coords.map(|c| c.into()), 
+            real_coords: coords.map(|c| c.into()),
+            transform: Transform::Identity__ 
+        })
     }
 }

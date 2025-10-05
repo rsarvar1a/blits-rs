@@ -1,4 +1,3 @@
-use itertools::Itertools;
 
 use crate::battle_of_lits::prelude::*;
 
@@ -19,16 +18,13 @@ impl minimax::Game for LITSGame {
     }
 
     fn generate_moves(state: &Self::S, moves: &mut Vec<Self::M>) {
-        // Feed moves into the moves vector in descending order by noisiness for the player to move (or ascending order by despair in the opponent's perspective).
-        let mvs = state.valid_moves();
-        moves.reserve(mvs.len());
-        moves.extend(mvs.iter().map(|&mv| (mv, state.noise(mv))).sorted_by_key(|(_, score)| -score).map(|(mv, _)| mv));
+
+        state._compute_valid_moves(moves);
     }
 
     fn get_winner(state: &Self::S) -> Option<minimax::Winner> {
-        let moves_remaining = state.valid_moves();
-        if moves_remaining.len() > 0 {
-            return None;
+        if !state.is_terminal() {
+            return None; 
         }
 
         let score = state.score() * state.player_to_move().perspective();

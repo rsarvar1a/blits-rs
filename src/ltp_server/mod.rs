@@ -176,14 +176,8 @@ impl LTPServer {
         }
 
         let pv = self.agent.principal_variation();
-        let mut board = self.get().clone();
-        for mv in pv {
-            match mv {
-                NULL_MOVE => board.pass_unchecked_engine(),
-                _         => board.play_unchecked_engine(mv),
-            };
-            println!("{}", self.piecemap.notate(mv));
-        }
+        let repr = pv.iter().map(|mv| self.piecemap.notate(*mv)).join("; ");
+        println!("{}", repr);
         Ok(())
     }
 
@@ -200,10 +194,11 @@ impl LTPServer {
 
     fn valid_moves(&mut self, _args: &[&str]) -> Result<()> {
         self.ensure_started()?;
-        let moves = self.get().valid_moves().iter().cloned().collect::<Vec<usize>>();
-        let moves = moves.iter().map(|i| self.piecemap.notate(*i)).join("\n");
+        let moves = self.get().valid_moves_set();
+        let movestr = moves.iter().collect::<Vec<usize>>().iter().map(|i| self.piecemap.notate(*i)).join("; ");
 
-        println!("{}", moves);
+        println!("{}", moves.len());
+        println!("{}", movestr);
         Ok(())
     }
 

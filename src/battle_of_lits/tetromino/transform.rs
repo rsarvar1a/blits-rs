@@ -54,11 +54,13 @@ impl Transform {
             .points
             .clone()
             .map(|p| self.canonicalize(&tetromino.kind).apply_one(&p));
+        let real_coords = points.map(|p| tetromino.anchor + p);
         let new_transform = (&tetromino.transform + self).canonicalize(&tetromino.kind);
         Tetromino {
             kind: tetromino.kind,
             anchor: tetromino.anchor,
             points,
+            real_coords,
             transform: new_transform,
         }
     }

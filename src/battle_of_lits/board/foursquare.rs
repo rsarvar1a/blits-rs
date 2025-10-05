@@ -8,16 +8,19 @@ pub struct FoursquareCounter([[u8; BOARD_SIZE - 1]; BOARD_SIZE - 1]);
 
 impl FoursquareCounter {
     /// Determines if the given tile violates the foursquare rule.
+    #[inline]
     pub fn any(&self, coord: &Coord) -> bool {
         self._check_for(coord, 4)
     }
 
     /// Determines if _placing_ the given tile would violate the foursquare rule.
+    #[inline]
     pub fn three(&self, coord: &Coord) -> bool {
         self._check_for(coord, 3)
     }
 
     /// Determines how many tiles are in the foursquare anchored (topleft) at the given coordinate.
+    #[inline]
     pub fn count(&self, coord: &Coord) -> u8 {
         self.0[coord.row][coord.col]
     }
@@ -41,6 +44,7 @@ impl FoursquareCounter {
     /// We can think of every cell in the grid as belonging to the four squares that have a topleft corner member to
     /// the topleft foursquare. This function checks which of those foursquares are in bounds; for example, when the
     /// coordinate is (0, 0) then the only valid foursquare is the one anchored at 0,0, not (-1, -1), (-1, 0) or (0, -1).
+    #[inline]
     pub fn update_unchecked(&mut self, coord: &Coord, tile: Option<Tile>) -> () {
         let op = match tile {
             Some(_) => "incr",
@@ -72,17 +76,20 @@ impl FoursquareCounter {
     }
 
     /// Increments the given counter in-place.
+    #[inline]
     fn incr_inplace(&mut self, coord: &Coord) -> () {
         let new_count = self.count(coord) + 1;
         self.write(coord, new_count);
     }
 
     /// Decrements the given counter in-place.
+    #[inline]
     fn decr_inplace(&mut self, coord: &Coord) -> () {
         let new_count = self.count(coord) - 1;
         self.write(coord, new_count);
     }
 
+    #[inline]
     fn write(&mut self, coord: &Coord, value: u8) -> () {
         self.0[coord.row][coord.col] = value;
     }

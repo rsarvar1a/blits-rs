@@ -1,2 +1,9 @@
 /target
+
+# sensitive info in the future, maybe
 .env
+
+# perf-related artifacts
+perf.data
+perf.data.old
+flamegraph.svg

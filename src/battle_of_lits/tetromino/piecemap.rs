@@ -30,7 +30,7 @@ pub struct PieceMap {
     forward: Vec<Tetromino>,
     reverse: HashMap<[OffsetCoord; 4], usize>,
     associations: Vec<Vec<Interaction>>,
-    associations_specific: [[FastSet; 3]; NUM_PIECES] // self.assoc_specific[mv_index][interaction.value] = set of moves that match
+    associations_specific: [[MoveSet; 3]; NUM_PIECES] // self.assoc_specific[mv_index][interaction.value] = set of moves that match
 }
 
 impl PieceMap {
@@ -92,7 +92,7 @@ impl PieceMap {
             }
         }
 
-        let associations_specific: [[FastSet; 3]; NUM_PIECES] = (0..NUM_PIECES).map(|idx| {
+        let associations_specific: [[MoveSet; 3]; NUM_PIECES] = (0..NUM_PIECES).map(|idx| {
             [Interaction::Conflicting, Interaction::Neutral, Interaction::Adjacent].map(|int| {
                 (0..NUM_PIECES).filter(|&p| associations[idx.min(p)][idx.max(p)] == int).collect()
             })
@@ -150,7 +150,7 @@ impl PieceMap {
     }
 
     /// Gets the interactions on a piece matching a certain outcome.
-    pub fn with_interaction(&self, id: usize, interaction: Interaction) -> &FastSet {
+    pub fn with_interaction(&self, id: usize, interaction: Interaction) -> &MoveSet {
         &self.associations_specific[id][interaction as usize]
     }
 }

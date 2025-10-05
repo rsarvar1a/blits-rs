@@ -111,10 +111,10 @@ impl std::str::FromStr for GameString {
             return Err(anyhow!("gamestring cannot be empty!"));
         };
 
-        let setup = setup_str.parse::<SetupString>()?;
+        let setup = setup_str.trim().parse::<SetupString>()?;
         let mut moves = vec![];
         for move_str in movelist {
-            let mv = move_str.parse::<MoveString>()?;
+            let mv = move_str.trim().parse::<MoveString>()?;
             moves.push(mv);
         }
 
