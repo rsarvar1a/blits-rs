@@ -28,4 +28,4 @@ target/release/blits --help
 
 `AMD Ryzen AI 9 HX 370; 12c(24t); 32GB@7500MHz`:
 - prototype: `5.25 kN/s` (no evaluator)
-- best effort: `13.51 MN/s` (no evaluator)
+- best effort: `22.14 MN/s` (no evaluator)
