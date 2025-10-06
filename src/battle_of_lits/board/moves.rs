@@ -57,20 +57,23 @@ impl<'a> Board<'a> {
         };
 
         let history: MoveSet = self.history.iter().collect();
-        let notable_interactions = self.history.iter().map(|mv| (
-            self.piecemap.with_interaction(*mv, Interaction::Adjacent),
-            self.piecemap.with_interaction(*mv, Interaction::Conflicting)
-        )).collect::<Vec<(&MoveSet, &MoveSet)>>();
+        let mut candidates = MoveSet::default();
+        
+        history.iter().map(|mv| {
+            self.piecemap.with_interaction(mv, Interaction::Adjacent)
+        }).for_each(|set| { candidates.union_inplace(set); });
 
-        (0..NUM_PIECES).any(|candidate| {
+        history.iter().map(|mv| {
+            self.piecemap.with_interaction(mv, Interaction::Conflicting)
+        }).for_each(|set| { candidates.difference_inplace(set); });
+
+        candidates.difference_inplace(&history);
+
+        candidates.iter().any(|candidate| {
             let kind = self.piecemap.get_kind(candidate);
-
-            if unsafe { *self.piece_bag.get_unchecked(kind as usize) == 0 } ||           // no more tiles of this type available
-                history.contains(candidate) ||                                           // played move
-                notable_interactions.iter().any(|(_, conf)| conf.contains(candidate)) || // conflicts with any previous move
-                !notable_interactions.iter().any(|(adj, _)| adj.contains(candidate)) {   // not even one adjacent piece on board
-                    return false;
-                }
+            if unsafe { *self.piece_bag.get_unchecked(kind as usize) == 0 } {       // not even one adjacent piece on board
+                return false;
+            }
 
             // we also drop pieces that violate foursquare. to do this, we clone the historical
             // foursquare, simulate the piece, and check all of the refcounts.
@@ -147,19 +150,23 @@ impl<'a> Board<'a> {
         };
 
         let history: MoveSet = self.history.iter().collect();
-        let notable_interactions = self.history.iter().map(|mv| (
-            self.piecemap.with_interaction(*mv, Interaction::Adjacent),
-            self.piecemap.with_interaction(*mv, Interaction::Conflicting)
-        )).collect::<Vec<(&MoveSet, &MoveSet)>>();
+        let mut valid_moves: MoveSet = MoveSet::default();
 
-        (0..NUM_PIECES)
-            .filter(|&candidate| {
+        history.iter() // insert adjacencies to current history
+            .map(|p| self.piecemap.with_interaction(p, Interaction::Adjacent))
+            .for_each(|set| { valid_moves.union_inplace(set); });  
+        
+        history.iter() // remove conflicts with current history
+            .map(|p| self.piecemap.with_interaction(p, Interaction::Conflicting))
+            .for_each(|set| { valid_moves.difference_inplace(set); });
+        
+        valid_moves.difference_inplace(&history); // remove played moves
+
+        valid_moves
+            .iter().filter(|&candidate| {
                 let kind = self.piecemap.get_kind(candidate);
-                if unsafe { *self.piece_bag.get_unchecked(kind as usize) == 0 } ||            // no more tiles of this type available
-                    history.contains(candidate) ||                                           // played move
-                    notable_interactions.iter().any(|(_, conf)| conf.contains(candidate)) || // conflicts with any previous move
-                    !notable_interactions.iter().any(|(adj, _)| adj.contains(candidate)) {   // not even one adjacent piece on board
-                        return false;
+                if unsafe { *self.piece_bag.get_unchecked(kind as usize) == 0 } {
+                    return false;
                 }
 
                 let mut foursquare = self.foursquare_mask.clone();

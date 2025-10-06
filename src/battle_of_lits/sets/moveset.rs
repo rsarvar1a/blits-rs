@@ -122,6 +122,7 @@ impl<'a> FromIterator<&'a usize> for MoveSet {
         let mut arr = [false; EXTENT];
         let mut count = 0;
         iter.into_iter().for_each(|i| {
+            if *i >= EXTENT { panic!("out of bounds"); }
             unsafe { *arr.get_unchecked_mut(*i) = true; }
             count += 1;
         });
@@ -134,6 +135,7 @@ impl FromIterator<usize> for MoveSet {
         let mut arr = [false; EXTENT];
         let mut count = 0;
         iter.into_iter().for_each(|i| {
+            if i >= EXTENT { panic!("out of bounds"); }
             unsafe { *arr.get_unchecked_mut(i) = true; }
             count += 1;
         });

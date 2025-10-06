@@ -1,16 +1,16 @@
 
 mod coordset;
-mod moveset;
+mod moveset2;
 
 pub use coordset::CoordSet;
-pub use moveset::MoveSet;
+pub use moveset2::MoveSet;
 
 pub trait SetOps<T: Clone + Copy + std::fmt::Debug, I> {
     /// Determines whether the given element is in this set.
     fn contains(&self, value: T) -> bool;
     
     /// Returns the length of the set.
-    /// 
+    ///
     /// WARNING: it is highly recommended that this operations
     /// is constant time, as it is used internally to back
     /// optimizations on the pairwise set operations.
