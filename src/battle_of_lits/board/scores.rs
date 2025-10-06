@@ -10,7 +10,7 @@ impl<'a> Board<'a> {
     ///   - (these are "earnable" points in the opposite player's favour, at a reduced rate)
     ///   - we are basically rewarding a player if they have a breadth of choice in their attack 
     pub(super) fn _true_effective_score(&self) -> i16 {
-        let covered_component = self.score() as i16;
+        let covered_component = self.score();
         // TODO: implement the foursquare scoring component
         // TODO: implement the opportunity scoring component
         let score = covered_component;

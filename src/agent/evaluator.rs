@@ -8,7 +8,7 @@ impl minimax::Evaluator for Evaluator {
     type G = LITSGame;
 
     fn evaluate(&self, state: &<Self::G as minimax::Game>::S) -> minimax::Evaluation {
-        state.score() * state.player_to_move().perspective()
+        state.effective_score()
     }
 
     fn generate_noisy_moves(

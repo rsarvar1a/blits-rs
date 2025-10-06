@@ -88,7 +88,7 @@ impl<'a> Board<'a> {
 
     /// Determines the "effective score" (i.e. the heuristic score) of the board.
     pub fn effective_score(&self) -> i16 {
-        self._true_effective_score() * (self.player_to_move.perspective() as i16)
+        self._true_effective_score() * self.player_to_move.perspective()
     }
 
     /// Determines the tile covering the cell at a given row and column on the board, if any tile exists.
