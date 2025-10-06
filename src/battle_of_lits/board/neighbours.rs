@@ -47,25 +47,6 @@ pub struct EdgeCounter {
 }
 
 impl EdgeCounter {
-    /// Updates the tile counts on the neighbours of a given tile.
-    pub fn update(
-        &mut self,
-        coord: &Coord,
-        tile: Option<Tile>,
-        prev: Option<Tile>,
-    ) -> Result<()> {
-        if tile.is_some() ^ prev.is_some() {
-            Err(anyhow!(
-                "expected placing or clearing tile; received transmutation from {:?} to {:?}",
-                prev,
-                tile
-            ))
-        } else {
-            self.update_unchecked(coord, tile, prev);
-            Ok(())
-        }
-    }
-
     /// Updates the tile counts on the neighbours of a given tile unchecked; engine use only.
     pub fn update_unchecked(
         &mut self,

@@ -4,28 +4,35 @@ An engine for The Battle of LITS.
 
 ## usage
 
-1. clone the project
 ```sh
-git clone git@github.com:rsarvar1a/blits-rs
+git clone git@github.com:rsarvar1a/blits-rs # clone the project
+cargo build --release                       # build the BLITS engine and LTP server
+touch .env                                  # create an empty .env (oops)
+target/release/blits --help                 # see engine options
+target/release/blits                        # serve LTP
 ```
 
-2. build the engine
-```sh
-cargo build --release
-```
+See [docs/commands.md](docs/commands.md) for more information on interacting with the engine.
 
-3. create an environment file
-```sh
-touch .env
-```
+## milestones
 
-4. run the engine
-```sh
-target/release/blits --help
-```
+### benchmarking conditions
 
-## stats
+- cpu: AMD Ryzen AI 9 HX 370 ( 12c / 24t ) @ 5.1 GHz
+- ram: 32 GB LPDDR5X @ 7497 MHz
+- BLITS settings: 
+    - `--num-threads 24`
+    - `--verbose`
 
-`AMD Ryzen AI 9 HX 370; 12c(24t); 32GB@7500MHz`:
-- prototype: `5.25 kN/s` (no evaluator)
-- best effort: `22.14 MN/s` (no evaluator)
+### implementations
+
+- gametree prototype:
+    - $5.251\times10^3$ nodes per second
+    - evaluator: none
+        - returns 0 in all non-terminal states
+
+- current best effort: 
+    - $2.738\times10^7$ nodes per second
+    - evaluator: greedy
+        - updates the score each time a Tile is set/unset on the board
+        - returns the current "visible" score in constant time

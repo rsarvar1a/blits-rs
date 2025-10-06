@@ -27,20 +27,6 @@ impl FoursquareCounter {
         }
     }
 
-    /// Updates the foursquare population count on all foursquares touching a given tile.
-    pub fn update(&mut self, coord: &Coord, tile: Option<Tile>) -> Result<()> {
-        if coord.in_bounds() {
-            self.update_unchecked(coord, tile);
-            Ok(())
-        } else {
-            Err(anyhow!(
-                "invalid coordinate ({:02}, {:02})",
-                coord.row,
-                coord.col
-            ))
-        }
-    }
-
     /// Updates the foursquare population count on all foursquares touching a given tile, unchecked; engine use only.
     ///
     /// We can think of every cell in the grid as belonging to the four squares that have a topleft corner member to

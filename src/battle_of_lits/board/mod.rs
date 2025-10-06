@@ -65,14 +65,14 @@ pub struct Board<'a> {
     /// Store the player to move instead of using parity because of the swap rule.
     player_to_move: Player,
 
+    /// The current uncovered-count in X's favour.
+    score: i16,
+
     /// Denotes if the game is in the pie rule swap state.
     swapped: bool,
 
     /// The canonial hash for the gamestate.
     zobrist_hash: u64,
-
-    /// A cache of valid moves for the previous position (i.e. lacking the most recently played move).
-    _valid_moves_cache: [Option<MoveSet>; PIECES_PER_KIND * 4 + 1]
 }
 
 impl<'a> Board<'a> {
@@ -115,26 +115,23 @@ impl<'a> Board<'a> {
             }
         };
         
-        let mut b = Board { 
+        Board { 
             cells, 
             piecemap,
             edge_mask: EdgeCounter::default(),
             foursquare_mask: FoursquareCounter::default(),
             piece_bag: [PIECES_PER_KIND; 4],
             history: Vec::with_capacity(20),
+            score: 0,
             swapped: false,
             player_to_move: Player::X,
-            zobrist_hash: Board::initial_zobrist_hash(&cells),
-            _valid_moves_cache: [const { None }; PIECES_PER_KIND * 4 + 1]
-        };
-
-        b._valid_moves_cache[0] = Some(MoveSet::from_iter(0..NUM_PIECES)); 
-        b
+            zobrist_hash: Board::initial_zobrist_hash(&cells)
+        }
     }
 
     /// Gets the greedy evaluation of this move. The greedy evaluation is the difference in enemy vs. self tiles covered, plus 
     /// the difference in self vs. enemy tiles protected by foursquare.
-    pub fn noise(&self, mv: usize) -> i32 {
+    pub fn noise(&self, mv: usize) -> i16 {
         if mv == NULL_MOVE { 
             return 6; // the swap is always noisy, just because we want to encourage exploring it
         }
@@ -144,7 +141,7 @@ impl<'a> Board<'a> {
         let true_coverage = piece.real_coords_lazy().map(|c| {
             let Coord { row, col } = c.coerce();
             self.cells.0[row][col].cell_value().map_or(0, |v| -v.perspective()) // covering a player's tile is scoring for the opposite player
-        }).sum::<i32>();
+        }).sum::<i16>();
 
         let true_protection = {
             let mut foursquare = self.foursquare_mask.clone();
@@ -156,8 +153,8 @@ impl<'a> Board<'a> {
                     return 0;
                 }
                 // uncovered tile scores in favour of the owning player, obviously
-                foursquare.three(&c) as i32 * self.cell_unchecked(&c).map_or(0, |v| v.perspective())
-            }).sum::<i32>()
+                foursquare.three(&c) as i16 * self.cell_unchecked(&c).map_or(0, |v| v.perspective())
+            }).sum::<i16>()
         };
 
         let score = (true_coverage + true_protection) * self.player_to_move.perspective();
@@ -196,7 +193,7 @@ impl<'a> Board<'a> {
     /// 
     /// As a neat consequence, the swap operation is symmetric - to unswap, we need to re-negate the board and hand control back to O.  
     pub fn pass(&mut self) -> Result<()> {
-        if self.history.len() == 1 {
+        if !self.swapped && self.history.len() == 1 {
             self.swap();
             Ok(())
         } else {
@@ -231,33 +228,8 @@ impl<'a> Board<'a> {
     }
 
     /// Gets the naive score on the board in X's perspective.
-    pub fn score(&self) -> i32 {
-        self.cells.0.iter().map(|row| {
-            row.iter().map(|cell| { 
-                if cell.covered() { return 0; };
-                cell.cell_value().map_or(0, |v| v.perspective())
-            }).sum::<i32>()
-        }).sum::<i32>()
-    }
-
-    /// Sets the value of the cell at a given row and column on the board.
-    pub fn set_cell(&mut self, coord: &Coord, cell: Option<Player>) -> Result<&mut Self> {
-        let r = self.get_mut(coord)?;
-        *r = r.with_cell(cell);
-        Ok(self)
-    }
-
-    /// Sets the tile covering the cell at a given row and column on the board.
-    pub fn set_lits(&mut self, coord: &Coord, lits: Option<Tile>) -> Result<&mut Self> {
-        let [cur, prev] = {
-            let r = self.get_mut(coord)?;
-            let prev = r.lits_value();
-            *r = r.with_lits(lits);
-            [r.lits_value(), prev]
-        };
-        self.edge_mask.update(coord, cur, prev)?;
-        self.foursquare_mask.update(coord, cur)?;
-        Ok(self)
+    pub fn score(&self) -> i16 {
+        self.score
     }
 
     /// Undoes a move on the board. Pretty much all that's necessary here is:

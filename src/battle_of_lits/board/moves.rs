@@ -40,6 +40,7 @@ impl<'a> Board<'a> {
                 self.zobrist_hash ^= Board::cell_hash(i, j, *cell); // add new cell to the hash
             });
         });
+        self.score = -self.score;
         self.swapped = !self.swapped;
         self.next_player();
     }

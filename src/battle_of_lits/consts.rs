@@ -25,7 +25,7 @@ impl Player {
 
     /// The given player's scoring factor.
     /// Choosing 1 and -1 allows for branchless negamax.
-    pub fn perspective(&self) -> i32 {
+    pub fn perspective(&self) -> i16 {
         match self {
             Player::X => 1,
             Player::O => -1

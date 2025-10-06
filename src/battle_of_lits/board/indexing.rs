@@ -14,19 +14,6 @@ impl<'a> Board<'a> {
             ))
         }
     }
-
-    /// Gets a mutable reference to the board cell at a given coordinate.
-    pub(super) fn get_mut(&mut self, coord: &Coord) -> Result<&mut BoardCell> {
-        if coord.in_bounds() {
-            Ok(&mut self.cells.0[coord.row][coord.col])
-        } else {
-            Err(anyhow!(
-                "invalid coordinate ({:02}, {:02})",
-                coord.row,
-                coord.col
-            ))
-        }
-    }
 }
 
 impl<'a> Board<'a> {
@@ -53,6 +40,9 @@ impl<'a> Board<'a> {
             *r = r.with_cell(cell);
             [prev, r.clone()]
         };
+        if self.get_unchecked(coord).lits_value().is_none() {  // add this symbol to the score if the new symbol is uncovered
+            self.score += cell.map_or(0, |v| v.perspective()); // if covered, do nothing, because the next operation that uncovers it will fix it
+        }
         self.zobrist_hash ^= Board::cell_hash(coord.row, coord.col, prev);
         self.zobrist_hash ^= Board::cell_hash(coord.row, coord.col, new);
         self
@@ -69,6 +59,10 @@ impl<'a> Board<'a> {
             let prev = r.lits_value();
             *r = r.with_lits(lits);
             [r.lits_value(), prev]
+        };
+        self.score += self.get_unchecked(coord).cell_value().map_or(0, |v| v.perspective()) * match lits {
+            Some(_) => -1, // setting a tile; remove this symbol from score
+            None    =>  1, // unsetting a tile; add this symbol to score
         };
         self.edge_mask.update_unchecked(coord, cur, prev);
         self.foursquare_mask.update_unchecked(coord, cur);
