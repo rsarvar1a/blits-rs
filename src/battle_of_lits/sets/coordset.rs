@@ -1,9 +1,10 @@
 
 use crate::prelude::*;
+use itertools::Itertools;
 
 type SubSet = u16;
 const SUBSET_SIZE: usize = BOARD_SIZE;
-const NUM_SUBSETS: usize = BOARD_SIZE;
+const NUM_SUBSETS: usize = (BOARD_SIZE / 4 + 1) * 4;
 
 #[derive(Clone, Copy, Debug)]
 pub struct CoordSet([SubSet; NUM_SUBSETS]);
@@ -12,6 +13,15 @@ impl CoordSet {
     #[inline]
     fn _index(coord: &Coord) -> (usize, usize) {
         (coord.row, coord.col)
+    }
+
+    pub fn neg_inplace(&mut self) -> & mut Self {
+        self.0.iter_mut().for_each(|sub| {
+            // we can just flip every relevant bit to change the presence of each Coord,
+            // but we can't leave the high bits set from 0 -> 1, so we set them back to 0 using the mask
+            *sub = !*sub & EXTENT_MASK;
+        });
+        self
     }
 }
 
@@ -204,5 +214,93 @@ impl IntoIterator for CoordSet {
     type Item = Coord;
     fn into_iter(self) -> Self::IntoIter {
         CoordSetIntoIterator::new(&self.0)
+    }
+}
+
+impl<'a> IntoIterator for &'a CoordSet {
+    type IntoIter = CoordSetIterator<'a>;
+    type Item = Coord;
+    fn into_iter(self) -> Self::IntoIter {
+        CoordSetIterator::new(&self.0)
+    }
+}
+
+const EXTENT_MASK: SubSet = {
+    let ones = ((1 as SubSet) << SUBSET_SIZE) - 1; // place a bit at the desired cap to get a bitstring like 0000010000000000, then subtract to get 0000001111111111
+    ones
+};
+
+impl std::ops::Neg for CoordSet {
+    type Output = CoordSet;
+    fn neg(self) -> Self::Output {  
+        let mut s = self.clone();
+        s.neg_inplace();
+        s
+    }
+}
+
+impl std::ops::Not for CoordSet {
+    type Output = CoordSet;
+    fn not(self) -> Self::Output {
+        let mut s = self.clone();
+        s.neg_inplace();
+        s
+    }
+}
+
+impl CoordSet {
+    pub fn union_3(a: &CoordSet, b: &CoordSet, c: &CoordSet) -> CoordSet {
+        CoordSet(std::array::from_fn(|i| a.0[i] | b.0[i] | c.0[i]))
+    }
+
+    pub fn union_4(a: &CoordSet, b: &CoordSet, c: &CoordSet, d: &CoordSet) -> CoordSet {
+        CoordSet(std::array::from_fn(|i| a.0[i] | b.0[i] | c.0[i] | d.0[i]))
+    }
+
+    pub fn union_5(a: &CoordSet, b: &CoordSet, c: &CoordSet, d: &CoordSet, e: &CoordSet) -> CoordSet {
+        CoordSet(std::array::from_fn(|i| a.0[i] | b.0[i] | c.0[i] | d.0[i] | e.0[i]))
+    }
+
+    pub fn union_6(a: &CoordSet, b: &CoordSet, c: &CoordSet, d: &CoordSet, e: &CoordSet, f: &CoordSet) -> CoordSet {
+        CoordSet(std::array::from_fn(|i| a.0[i] | b.0[i] | c.0[i] | d.0[i] | e.0[i] | f.0[i]))
+    }
+
+    pub fn union_7(a: &CoordSet, b: &CoordSet, c: &CoordSet, d: &CoordSet, e: &CoordSet, f: &CoordSet, g: &CoordSet) -> CoordSet {
+        CoordSet(std::array::from_fn(|i| a.0[i] | b.0[i] | c.0[i] | d.0[i] | e.0[i] | f.0[i] | g.0[i]))
+    }
+
+    pub fn union_8(a: &CoordSet, b: &CoordSet, c: &CoordSet, d: &CoordSet, e: &CoordSet, f: &CoordSet, g: &CoordSet, h: &CoordSet) -> CoordSet {
+        CoordSet(std::array::from_fn(|i| a.0[i] | b.0[i] | c.0[i] | d.0[i] | e.0[i] | f.0[i] | g.0[i] | h.0[i]))
+    }
+
+    pub fn union_remainder<'a>(sets: &Vec<&'a CoordSet>) -> CoordSet {
+        match sets.len() {
+            0 => CoordSet::default(),
+            1 => sets[0].clone(),
+            2 => sets[0].union(sets[1]),
+            3 => CoordSet::union_3(sets[0], sets[1], sets[2]),
+            4 => CoordSet::union_4(sets[0], sets[1], sets[2], sets[3]),
+            5 => CoordSet::union_5(sets[0], sets[1], sets[2], sets[3], sets[4]),
+            6 => CoordSet::union_6(sets[0], sets[1], sets[2], sets[3], sets[4], sets[5]),
+            7 => CoordSet::union_7(sets[0], sets[1], sets[2], sets[3], sets[4], sets[5], sets[6]),
+            _ => unreachable!("remainder of 8-ary tuple iterator is always 7 elements or fewer")
+        }
+    }
+
+    /// Vectorized union on an arbitrary collection of CoordSets.
+    pub fn union_many<'a>(iter: impl Iterator<Item = &'a CoordSet>) -> CoordSet {
+        let mut set_iter = iter.into_iter().tuples::<(_,_,_,_,_,_,_,_)>();
+        
+        let mut sets = set_iter
+            .by_ref()
+            .map(|(a, b, c, d, e, f, g, h)| CoordSet::union_8(a, b, c, d, e, f, g, h))
+            .collect::<Vec<_>>();
+        let remainder = set_iter.into_buffer().collect();
+        sets.push(CoordSet::union_remainder(&remainder));
+
+        match sets.len() {
+            1 => sets[0],
+            _ => CoordSet::union_many(sets.iter())
+        }
     }
 }

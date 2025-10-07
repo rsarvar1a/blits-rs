@@ -15,6 +15,7 @@ pub struct BLITSAgent {
     strategy: minimax::ParallelSearch<Evaluator>,
     piecemap: &'static PieceMap,
     past: Vec<usize>,
+    past_boards: Vec<Board<'static>>,
     future: Vec<usize>
 }
 
@@ -28,6 +29,7 @@ impl BLITSAgent {
     pub fn new(&mut self, setup_str: Option<SetupString>) {
         self.board = Board::new(setup_str.map(|v| v.grid), self.piecemap);
         [self.past, self.future] = [vec![], vec![]];
+        self.past_boards = vec![];
     }
 
     /// Plays a move on the board if it is legal. If the move is a redo, then just redo it and maintain the future history.
@@ -35,6 +37,7 @@ impl BLITSAgent {
         if self.future.last().is_some_and(|&next| next == mv) {
             self.redo_move()
         } else {
+            self.past_boards.push(self.board.clone());
             match mv {
                 NULL_MOVE => self.board.pass()?,
                 _         => self.board.play(mv)?
@@ -48,6 +51,7 @@ impl BLITSAgent {
     /// Redo a move, if any - this maintains the linear history.
     pub fn redo_move(&mut self) -> Result<()> {
         if let Some(mv) = self.future.pop() {
+            self.past_boards.push(self.board.clone());
             match mv {
                 NULL_MOVE => self.board.pass()?,
                 _         => self.board.play(mv)?
@@ -64,6 +68,7 @@ impl BLITSAgent {
         if self.future.last().is_some_and(|&next| next == NULL_MOVE) {
             self.redo_move()
         } else {
+            self.past_boards.push(self.board.clone());
             self.board.pass()?;
             self.past.push(NULL_MOVE);
             self.future.clear();
@@ -74,10 +79,7 @@ impl BLITSAgent {
     /// Undoes a move on the board if it is legal.
     pub fn undo_move(&mut self) -> Result<usize> {
         if let Some(mv) = self.past.pop() {
-            match mv {
-                NULL_MOVE => self.board.unpass()?,
-                _         => self.board.undo(mv)?
-            };
+            self.board = self.past_boards.pop().unwrap();
             self.future.push(mv);
             Ok(mv)
         } else {
@@ -110,6 +112,7 @@ impl BLITSAgent {
     pub fn with_board(&mut self, board: &Board<'static>) {
         self.board = board.clone();
         [self.past, self.future] = [vec![], vec![]];
+        self.past_boards = vec![];
     }
 }
 
@@ -144,6 +147,7 @@ impl AgentConfig {
             strategy: minimax::ParallelSearch::new(Evaluator::default(), self.search_opts, self.parallel_opts),
             piecemap,
             past: vec![],
+            past_boards: vec![],
             future: vec![] 
         }
     }

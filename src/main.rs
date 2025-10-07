@@ -1,5 +1,7 @@
 #![feature(never_type)]
 
+use std::time::Instant;
+
 use clap::Parser;
 use flexi_logger::{AdaptiveFormat, Logger, WriteMode};
 use lib_blits::prelude::*;
@@ -20,8 +22,9 @@ fn main() -> Result<!> {
         .start()?;
 
     // Serve LTP and the BLITS engine.
+    let start_computing_piecemap = Instant::now();
     let piecemap = Box::leak(Box::new(PieceMap::new()));
-    log::info!("ready");
+    log::info!("ready in {:.2}s", (Instant::now() - start_computing_piecemap).as_secs_f64());
     
     let Err(e) = LTPServer::new(options, piecemap).run();
     log::error!("fatal error: {}", e);

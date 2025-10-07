@@ -12,6 +12,9 @@ impl<'a> Board<'a> {
             tetromino.real_coords_lazy().for_each(|c| {
                 self.set_lits_unchecked(&c.coerce(), Some(tetromino.kind));
             });
+
+            self.valid_moves.0 = self.valid_moves.1;
+            self.valid_moves.1 = self.valid_moves_set();
         }
 
         { // amortized state calculations
@@ -25,33 +28,6 @@ impl<'a> Board<'a> {
             self.zobrist_hash ^= self.move_hash(id); // add the move to the hash
             self.history.push(id);
             self.next_player();
-        }
-    }
-
-    /// Removes a tetromino from the board unchecked; engine use only.
-    pub(super) fn undo_unchecked(&mut self, tetromino: &Tetromino, id: usize) -> () {
-        { // undone piece mutations
-            unsafe {
-                *self.piece_bag.get_unchecked_mut(tetromino.kind as usize) += 1;
-            }
-            tetromino.real_coords_lazy().for_each(|c| {
-                self.set_lits_unchecked(&c.coerce(), None);
-            });
-        }
-
-        { // meta information
-            self.zobrist_hash ^= self.move_hash(id); // remove the move from the hash
-            self.history.pop();
-            self.next_player();
-        }
-
-        { // amortized state calculations
-            self.cover.filter(tetromino.real_coords_lazy().map(|c| c.coerce())); // hoist for vectorization, maybe
-            // unlike playing a piece, undoing a neighbours memoization is EXPENSIVE
-            // thus, we do NOT let the engine undo in place; we prefer to force it to copy
-            let mut neighbours = CoordSet::default();
-            self.history.iter().for_each(|&mv| { neighbours.union_inplace(self.piecemap.neighbours(mv)); });
-            neighbours.difference_inplace(&self.cover);
         }
     }
 
