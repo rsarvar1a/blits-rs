@@ -39,16 +39,19 @@ impl<'a> Board<'a> {
             });
         }
 
-        { // amortized state calculations
-            self.cover.filter(tetromino.real_coords_lazy().map(|c| c.coerce())); // hoist for vectorization, maybe
-            // unlike playing a piece, undoing a neighbours memoization is EXPENSIVE
-            // thus, we do NOT let the engine undo in place; we prefer to force it to copy
-        }
-
         { // meta information
             self.zobrist_hash ^= self.move_hash(id); // remove the move from the hash
             self.history.pop();
             self.next_player();
+        }
+
+        { // amortized state calculations
+            self.cover.filter(tetromino.real_coords_lazy().map(|c| c.coerce())); // hoist for vectorization, maybe
+            // unlike playing a piece, undoing a neighbours memoization is EXPENSIVE
+            // thus, we do NOT let the engine undo in place; we prefer to force it to copy
+            let mut neighbours = CoordSet::default();
+            self.history.iter().for_each(|&mv| { neighbours.union_inplace(self.piecemap.neighbours(mv)); });
+            neighbours.difference_inplace(&self.cover);
         }
     }
 
