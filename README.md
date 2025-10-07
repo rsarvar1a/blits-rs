@@ -32,7 +32,7 @@ See [docs/commands.md](docs/commands.md) for more information on interacting wit
         - returns 0 in all non-terminal states
 
 - current best effort: 
-    - $2.738\times10^7$ nodes per second
+    - $3.169\times10^7$ nodes per second
     - evaluator: greedy
         - updates the score each time a Tile is set/unset on the board
         - returns the current "visible" score in constant time
