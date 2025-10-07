@@ -63,7 +63,7 @@ impl SetOps<&Coord, Coord> for CoordSet {
         self
     }
 
-    fn extend(&mut self, iter: impl Iterator<Item = Coord>) -> &mut Self {
+    fn _extend(&mut self, iter: impl Iterator<Item = Coord>) -> &mut Self {
         iter.into_iter().for_each(|c| {
             self.insert(&c);
         });

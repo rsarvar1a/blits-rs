@@ -18,7 +18,7 @@ impl<'a> Board<'a> {
         }
 
         { // amortized state calculations
-            self.cover.extend(tetromino.real_coords_lazy().map(|c| c.coerce())); // hoist for vectorization, maybe
+            self.cover._extend(tetromino.real_coords_lazy().map(|c| c.coerce())); // hoist for vectorization, maybe
             self.neighbours
                 .union_inplace(self.piecemap.neighbours(id)) // add all the new neighbours
                 .difference_inplace(&self.cover); // remove anything conflicting (either in the new neighbours, or from the just-played piece)
@@ -135,17 +135,17 @@ impl<'a> Board<'a> {
             }).collect()
     }
 
-    pub fn _compute_valid_moves(&self, moves: &mut Vec<usize>) {
+    pub fn _compute_valid_moves(&self, moves: &mut MoveSet) {
         match self.history.len() {
             0 => { 
                 moves.extend(0..NUM_PIECES);
                 return;
             },
             1 => { 
-                let mvs = self.piecemap.with_interaction(self.history[0], Interaction::Adjacent).clone();
-                moves.extend(mvs.iter());
+                let mvs = self.piecemap.with_interaction(self.history[0], Interaction::Adjacent);
+                moves.union_inplace(mvs);
                 if !self.swapped {
-                    moves.push(NULL_MOVE);
+                    moves.insert(NULL_MOVE);
                 }
                 return;
             },
@@ -178,9 +178,7 @@ impl<'a> Board<'a> {
                     foursquare.update_unchecked(&c.coerce(), Some(piece.kind));
                 });
                 !piece.real_coords_lazy().any(|c| foursquare.any(&c.coerce()))                // this piece would violate foursquare
-            }).for_each(|p| {
-                moves.push(p);
-            });
+            }).collect_into(moves);
     }
 
     pub fn _compute_noisy_moves(&self, moves: &mut Vec<usize>) {

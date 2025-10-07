@@ -18,7 +18,7 @@ impl minimax::Game for LITSGame {
     }
 
     fn generate_moves(state: &Self::S, moves: &mut Vec<Self::M>) {
-        state._compute_valid_moves(moves);
+        state.valid_moves(moves);
     }
 
     fn get_winner(state: &Self::S) -> Option<minimax::Winner> {
