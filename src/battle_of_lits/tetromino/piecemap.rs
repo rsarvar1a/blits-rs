@@ -19,10 +19,20 @@ pub enum Interaction {
 /// Precomputed data for pairwise interactions between pieces on the board.
 #[derive(Clone, Debug)]
 pub struct PieceMap {
+    /// Get a tetromino by ID.
     forward: Box<[Tetromino; NUM_PIECES]>,
+
+    /// Get a tetromino's ID by its coordinates.
     reverse: HashMap<[OffsetCoord; 4], usize>,
+
+    /// Get an interaction between two tetrominos by ID.
     associations: Vec<Vec<Interaction>>,
-    associations_specific: [[MoveSet; 3]; NUM_PIECES] // self.assoc_specific[mv_index][interaction.value] = set of moves that match
+
+    /// Get the tetrominos that have a specific interaction with the subject tetromino. 
+    associations_specific: [[MoveSet; 3]; NUM_PIECES],
+
+    /// Get the neighbouring coords to the tetromino.
+    neighbours: Box<[CoordSet; NUM_PIECES]>
 }
 
 impl PieceMap {
@@ -92,7 +102,17 @@ impl PieceMap {
             })
         }).collect_array::<NUM_PIECES>().unwrap();
 
-        PieceMap { forward: Box::new(forward), reverse, associations, associations_specific }
+        let neighbours: [CoordSet; NUM_PIECES] = (0..NUM_PIECES).map(|idx| {
+            forward[idx].neighbours()
+        }).collect_array::<NUM_PIECES>().unwrap();
+
+        PieceMap { 
+            forward: Box::new(forward), 
+            reverse, 
+            associations, 
+            associations_specific, 
+            neighbours: Box::new(neighbours) 
+        }
     }
 
     /// Gets the interaction between two pieces by ID.
@@ -120,6 +140,13 @@ impl PieceMap {
     pub fn get_piece(&self, id: usize) -> &Tetromino {
         unsafe {
             self.forward.get_unchecked(id)
+        }
+    }
+
+    /// Gets the neighbouring coords of a piece by ID.
+    pub fn neighbours(&self, id: usize) -> &CoordSet {
+        unsafe {
+            self.neighbours.get_unchecked(id)
         }
     }
 

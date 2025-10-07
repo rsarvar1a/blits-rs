@@ -1,151 +1,183 @@
-use crate::prelude::*;
 
-const EXTENT: usize = NUM_PIECES + 1;
+use crate::prelude::{SetOps, NUM_PIECES};
 
-#[derive(Clone, Debug)]
-/// A purpose-built implementation of a moveset.
-pub struct MoveSet(Box<[bool; EXTENT]>, usize);
+type SubSet = u16;
+const SUBSET_SIZE: usize = size_of::<SubSet>() * 8;
+const NUM_SUBSETS: usize = (NUM_PIECES + 1) / SUBSET_SIZE + 1;
 
-impl Default for MoveSet {
-    fn default() -> Self {
-        MoveSet(Box::new([false; EXTENT]), 0)
+#[derive(Clone, Copy, Debug)]
+pub struct MoveSet([SubSet; NUM_SUBSETS]);
+
+impl MoveSet {
+    #[inline]
+    fn _index(value: usize) -> (usize, usize) {
+        (value / SUBSET_SIZE, value % SUBSET_SIZE)
     }
 }
 
-impl MoveSet {
-    fn _order<'a>(lhs: &'a MoveSet, rhs: &'a MoveSet) -> (&'a MoveSet, &'a MoveSet) {
-        if lhs.len() < rhs.len() {
-            (lhs, rhs)
-        } else {
-            (rhs, lhs)
-        }
-    }
-
-    fn _into_iter(self) -> impl Iterator<Item = usize> {
-        self.0.into_iter().enumerate()
-            .filter_map(|(i, v)| if v { Some(i) } else { None })
-    }
-
-    pub fn new() -> MoveSet {
-        MoveSet::default()
-    }
-
-    pub fn iter_neg(&self) -> impl Iterator<Item = usize> {
-        self.0.iter().enumerate()
-            .filter_map(|(i, &v)| if v { None } else { Some(i) })
+impl Default for MoveSet {
+    fn default() -> Self {
+        MoveSet([SubSet::default(); NUM_SUBSETS])
     }
 }
 
 impl SetOps<usize, usize> for MoveSet {
+    fn contains(&self, value: usize) -> bool {
+        let (ia, ib) = MoveSet::_index(value);
+        unsafe { (self.0.get_unchecked(ia) >> ib) & 1 == 1 }
+    }
+
     fn len(&self) -> usize {
-        self.1
+        self.0.iter().map(|sub| sub.count_ones() as usize).sum()
+    }
+
+    fn iter<'a>(&'a self) -> impl Iterator<Item = usize> {
+        MoveSetIterator::new(&self.0)
     }
 
     fn insert(&mut self, value: usize) -> &mut Self {
-        let el = unsafe { self.0.get_unchecked_mut(value) };
-        self.1 += !*el as usize;
-        *el = true;
+        let (ia, ib) = MoveSet::_index(value);
+        let v = (1 as SubSet) << ib;
+        unsafe { 
+            *self.0.get_unchecked_mut(ia) |= v;
+        }
         self
     }
 
     fn remove(&mut self, value: usize) -> &mut Self {
-        let el = unsafe { self.0.get_unchecked_mut(value) };
-        self.1 -= *el as usize;
-        *el = false;
+        let (ia, ib) = MoveSet::_index(value);
+        let v = !((1 as SubSet) << ib);
+        unsafe {
+            *self.0.get_unchecked_mut(ia) &= v;
+        }
         self
     }
 
-    fn contains(&self, value: usize) -> bool {
-        unsafe { *self.0.get_unchecked(value) }
+    fn extend(&mut self, iter: impl Iterator<Item = usize>) -> &mut Self {
+        iter.into_iter().for_each(|i| {
+            self.insert(i);
+        });
+        self
     }
 
-    fn iter(&self) -> impl Iterator<Item = usize> {
-        self.0.iter().enumerate()
-            .filter_map(|(i, &v)| if v { Some(i) } else { None })
+    fn filter(&mut self, iter: impl Iterator<Item = usize>) -> &mut Self {
+        iter.into_iter().for_each(|i| {
+            self.remove(i);
+        });
+        self
     }
 
     fn intersect(&self, other: &Self) -> Self {
-        let (smaller, larger) = MoveSet::_order(self, other); 
-        let mut smaller = smaller.clone();
-        smaller.intersect_inplace(larger);
-        smaller
+        let mut s = self.clone();
+        s.intersect_inplace(other);
+        s
     }
 
     fn intersect_inplace(&mut self, other: &Self) -> &mut Self {
-        other.iter_neg().for_each(|mv| { self.remove(mv); });
+        self.0.iter_mut().zip(other.0.iter()).for_each(|(l, r)| {
+            *l &= r;
+        });
         self
     }
 
     fn union(&self, other: &Self) -> Self {
-        let (smaller, larger) = MoveSet::_order(self, other);
-        let mut larger = larger.clone();
-        larger.union_inplace(smaller);
-        larger
+        let mut s = self.clone();
+        s.union_inplace(other);
+        s
     }
 
     fn union_inplace(&mut self, other: &Self) -> &mut Self {
-        other.iter().for_each(|mv| { self.insert(mv); });
+        self.0.iter_mut().zip(other.0.iter()).for_each(|(l, r)| {
+            *l |= r;
+        });
         self
     }
 
     fn difference(&self, other: &Self) -> Self {
-        let (smaller, larger) = MoveSet::_order(self, other);
-        let mut larger = larger.clone();
-        larger.difference_inplace(smaller);
-        larger
+        let mut s = self.clone();
+        s.difference_inplace(other);
+        s
     }
 
     fn difference_inplace(&mut self, other: &Self) -> &mut Self {
-        other.iter().for_each(|mv| { self.remove(mv); });
+        self.0.iter_mut().zip(other.0.iter()).for_each(|(l, r)| {
+            *l &= !r;
+        });
         self
-    }
-}
-
-impl IntoIterator for MoveSet {
-    type Item = usize;
-    type IntoIter = impl Iterator<Item = usize>;
-    fn into_iter(self) -> Self::IntoIter {
-        self._into_iter()
-    }
-}
-
-impl IntoIterator for &MoveSet {
-    type Item = usize;
-    type IntoIter = impl Iterator<Item = usize>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.clone()._into_iter()
     }
 }
 
 impl<'a> FromIterator<&'a usize> for MoveSet {
     fn from_iter<T: IntoIterator<Item = &'a usize>>(iter: T) -> Self {
-        let mut arr = [false; EXTENT];
-        let mut count = 0;
-        iter.into_iter().for_each(|i| {
-            if *i >= EXTENT { panic!("out of bounds"); }
-            unsafe { *arr.get_unchecked_mut(*i) = true; }
-            count += 1;
+        let mut s = MoveSet::default();
+        iter.into_iter().for_each(|&i| {
+            s.insert(i);
         });
-        MoveSet(Box::new(arr), count)
+        s
     }
 }
 
 impl FromIterator<usize> for MoveSet {
     fn from_iter<T: IntoIterator<Item = usize>>(iter: T) -> Self {
-        let mut arr = [false; EXTENT];
-        let mut count = 0;
+        let mut s = MoveSet::default();
         iter.into_iter().for_each(|i| {
-            if i >= EXTENT { panic!("out of bounds"); }
-            unsafe { *arr.get_unchecked_mut(i) = true; }
-            count += 1;
+            s.insert(i);
         });
-        MoveSet(Box::new(arr), count)
+        s
     }
 }
 
-impl std::ops::Neg for &MoveSet {
-    type Output = MoveSet;
-    fn neg(self) -> Self::Output {
-        MoveSet(Box::new(self.0.map(|v| !v)), EXTENT - self.1)
+pub struct MoveSetIterator<'a> {
+    data: &'a [SubSet; NUM_SUBSETS],
+    mask: SubSet,
+    current_subset: usize,
+}
+
+impl<'a> MoveSetIterator<'a> {
+    pub fn new<'d>(data: &'d [SubSet; NUM_SUBSETS]) -> MoveSetIterator<'d> {
+        MoveSetIterator { data, mask: SubSet::MAX, current_subset: 0 }
+    }
+}
+
+impl<'a> Iterator for MoveSetIterator<'a> {
+    type Item = usize;
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.current_subset >= NUM_SUBSETS {
+                return None;
+            }
+            
+            let subject = self.data[self.current_subset] & self.mask;
+            let tz = subject.trailing_zeros() as usize;
+
+            if tz == SUBSET_SIZE {
+                self.current_subset += 1;
+                self.mask = SubSet::MAX;
+                continue;
+            } else {
+                let value = self.current_subset * SUBSET_SIZE + tz;
+                self.mask ^= (1 as SubSet) << tz; // add a 0 where we found the 1 to knock it out of the next iteration
+                return Some(value);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::prelude::SetOps;
+
+    use super::MoveSet;
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn iterate() {
+        let elements = BTreeSet::from_iter([1, 4, 21, 144, 333, 1292].into_iter());
+        
+        let mut s = MoveSet::default();
+        elements.iter().for_each(|&i| { s.insert(i); });
+        let recovered = s.iter().collect::<BTreeSet<_>>();
+
+        assert!(elements == recovered) 
     }
 }

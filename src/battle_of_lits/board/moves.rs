@@ -5,28 +5,51 @@ const GAME_LENGTH_LOWER_BOUND: usize = 10;
 impl<'a> Board<'a> {
     /// Plays a move onto the board unchecked; engine use only.
     pub(super) fn play_unchecked(&mut self, tetromino: &Tetromino, id: usize) -> () {
-        unsafe {
-            *self.piece_bag.get_unchecked_mut(tetromino.kind as usize) -= 1;
+        { // played piece mutations
+            unsafe {
+                *self.piece_bag.get_unchecked_mut(tetromino.kind as usize) -= 1;
+            }
+            tetromino.real_coords_lazy().for_each(|c| {
+                self.set_lits_unchecked(&c.coerce(), Some(tetromino.kind));
+            });
         }
-        tetromino.real_coords_lazy().for_each(|c| {
-            self.set_lits_unchecked(&c.coerce(), Some(tetromino.kind));
-        });
-        self.zobrist_hash ^= self.move_hash(id); // add the move to the hash
-        self.history.push(id);
-        self.next_player();
+
+        { // amortized state calculations
+            self.cover.extend(tetromino.real_coords_lazy().map(|c| c.coerce())); // hoist for vectorization, maybe
+            self.neighbours
+                .union_inplace(self.piecemap.neighbours(id)) // add all the new neighbours
+                .difference_inplace(&self.cover); // remove anything conflicting (either in the new neighbours, or from the just-played piece)
+        }
+
+        { // meta information
+            self.zobrist_hash ^= self.move_hash(id); // add the move to the hash
+            self.history.push(id);
+            self.next_player();
+        }
     }
 
     /// Removes a tetromino from the board unchecked; engine use only.
     pub(super) fn undo_unchecked(&mut self, tetromino: &Tetromino, id: usize) -> () {
-        unsafe {
-            *self.piece_bag.get_unchecked_mut(tetromino.kind as usize) += 1;
+        { // undone piece mutations
+            unsafe {
+                *self.piece_bag.get_unchecked_mut(tetromino.kind as usize) += 1;
+            }
+            tetromino.real_coords_lazy().for_each(|c| {
+                self.set_lits_unchecked(&c.coerce(), None);
+            });
         }
-        tetromino.real_coords_lazy().for_each(|c| {
-            self.set_lits_unchecked(&c.coerce(), None);
-        });
-        self.zobrist_hash ^= self.move_hash(id); // remove the move from the hash
-        self.history.pop();
-        self.next_player();
+
+        { // amortized state calculations
+            self.cover.filter(tetromino.real_coords_lazy().map(|c| c.coerce())); // hoist for vectorization, maybe
+            // unlike playing a piece, undoing a neighbours memoization is EXPENSIVE
+            // thus, we do NOT let the engine undo in place; we prefer to force it to copy
+        }
+
+        { // meta information
+            self.zobrist_hash ^= self.move_hash(id); // remove the move from the hash
+            self.history.pop();
+            self.next_player();
+        }
     }
 
     /// Swaps the position by:

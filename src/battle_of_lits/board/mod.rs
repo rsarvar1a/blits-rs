@@ -37,6 +37,9 @@ pub struct Board<'a> {
     /// A grid of squares on the board, each containing an X, O, or neither, and possibly one of the four game tiles.
     cells: Grid,
 
+    /// A running reference to the covered cells.
+    cover: CoordSet,
+
     /// A reference counter for each colour on the board that tells us how many tiles of a given colour border each cell in the grid.  
     ///
     /// Each value in this mask is a quartet of three-bit trios, each of which counts edges for one of the four LITS tiles.  
@@ -55,6 +58,11 @@ pub struct Board<'a> {
     /// Id-based storage is useful because while linear history operations require a list,
     /// we can quickly obtain a moveset for conflict resolution operations like move validity.
     history: Vec<usize>,
+
+    /// A collection of _all_ neighbouring cells to pieces on this board, obviously excluding covered ones.
+    /// 
+    /// This is useful for some heuristics, but keep in mind that many adjacent uncovered cells are actually unreachable!
+    neighbours: CoordSet,
 
     /// The number of pieces remaining in each type.
     piece_bag: [usize; 4],
@@ -117,14 +125,16 @@ impl<'a> Board<'a> {
         
         Board { 
             cells, 
-            piecemap,
+            cover: CoordSet::default(),
             edge_mask: EdgeCounter::default(),
             foursquare_mask: FoursquareCounter::default(),
-            piece_bag: [PIECES_PER_KIND; 4],
             history: Vec::with_capacity(20),
+            neighbours: CoordSet::default(),
+            piece_bag: [PIECES_PER_KIND; 4],
+            piecemap,
+            player_to_move: Player::X,
             score: 0,
             swapped: false,
-            player_to_move: Player::X,
             zobrist_hash: Board::initial_zobrist_hash(&cells)
         }
     }

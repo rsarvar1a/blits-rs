@@ -1,9 +1,9 @@
 
 mod coordset;
-mod moveset2;
+mod moveset;
 
 pub use coordset::CoordSet;
-pub use moveset2::MoveSet;
+pub use moveset::MoveSet;
 
 pub trait SetOps<T: Clone + Copy + std::fmt::Debug, I> {
     /// Determines whether the given element is in this set.
@@ -24,6 +24,12 @@ pub trait SetOps<T: Clone + Copy + std::fmt::Debug, I> {
 
     /// Removes a value from the set, if it exists.
     fn remove(&mut self, value: T) -> &mut Self;
+
+    /// Extends the set from an iterator of compatible values.
+    fn extend(&mut self, iter: impl Iterator<Item = I>) -> &mut Self;
+
+    /// Drops from the set all elements found in the iterator.
+    fn filter(&mut self, iter: impl Iterator<Item = I>) -> &mut Self;
 
     /// Returns a new set consisting of all the elements of self
     /// that are also in the other set.
