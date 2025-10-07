@@ -1,4 +1,6 @@
 
+use std::mem::MaybeUninit;
+
 use itertools::Itertools;
 
 use crate::battle_of_lits::prelude::*;
@@ -38,21 +40,25 @@ pub struct PieceMap {
 impl PieceMap {
     /// Creates a new PieceMap.
     pub fn new() -> PieceMap {
-        let mut tetrominos = [Tetromino::default(); NUM_PIECES];
-        let mut i = 0;
+        // man just give us placement new already
+        let forward = unsafe { 
+            let mut tetrominos: Box<MaybeUninit<[Tetromino; NUM_PIECES]>> = Box::new_zeroed();
+            let mut i = 0;
 
-        Tile::all().iter().for_each(|kind| {
-            (0..10).cartesian_product(0..10).map(|(row, col)| Coord { row, col }).for_each(|anchor| {
-                Tetromino::identity(*kind, &anchor).enumerate().iter().for_each(|isomorph| {
-                    if isomorph.in_bounds() {
-                        unsafe { *tetrominos.get_unchecked_mut(i) = *isomorph };
-                        i += 1;
-                    }
+            Tile::all().iter().for_each(|kind| {
+                (0..10).cartesian_product(0..10).map(|(row, col)| Coord { row, col }).for_each(|anchor| {
+                    Tetromino::identity(*kind, &anchor).enumerate().iter().for_each(|isomorph| {
+                        if isomorph.in_bounds() {
+                            *tetrominos.assume_init_mut().get_unchecked_mut(i) = *isomorph;
+                            i += 1;
+                        }
+                    });
                 });
             });
-        });
 
-        let forward = tetrominos;
+            tetrominos.assume_init()
+        };
+
         let reverse = forward.iter().enumerate().map(|(i, piece): (usize, &Tetromino)| (piece.real_coords(), i)).collect::<HashMap<[OffsetCoord; 4], usize>>();
         let mut associations = vec![vec![Interaction::Conflicting; NUM_PIECES]; NUM_PIECES];
 
@@ -102,16 +108,21 @@ impl PieceMap {
             })
         }).collect_array::<NUM_PIECES>().unwrap();
 
-        let neighbours: [CoordSet; NUM_PIECES] = (0..NUM_PIECES).map(|idx| {
-            forward[idx].neighbours()
-        }).collect_array::<NUM_PIECES>().unwrap();
+        // man just give us placement new already
+        let neighbours = unsafe {
+            let mut neighbours: Box<MaybeUninit<[CoordSet; NUM_PIECES]>> = Box::new_zeroed();
+            (0..NUM_PIECES).for_each(|idx| {
+                *neighbours.assume_init_mut().get_unchecked_mut(idx) = forward[idx].neighbours();
+            });
+            neighbours.assume_init()
+        };
 
         PieceMap { 
-            forward: Box::new(forward), 
+            forward, 
             reverse, 
             associations, 
             associations_specific, 
-            neighbours: Box::new(neighbours) 
+            neighbours 
         }
     }
 
