@@ -34,7 +34,10 @@ pub struct PieceMap {
     associations_specific: [[MoveSet; 3]; NUM_PIECES],
 
     /// Get the neighbouring coords to the tetromino.
-    neighbours: Box<[CoordSet; NUM_PIECES]>
+    neighbours: Box<[CoordSet; NUM_PIECES]>,
+
+    /// Get the coordset representation of a piece instead of the array representation.
+    selfs: Box<[CoordSet; NUM_PIECES]>,
 }
 
 impl PieceMap {
@@ -117,12 +120,27 @@ impl PieceMap {
             neighbours.assume_init()
         };
 
+        let selfs = unsafe {
+            let mut selfs: Box<MaybeUninit<[CoordSet; NUM_PIECES]>> = Box::new_zeroed();
+            (0..NUM_PIECES).for_each(|idx| {
+                *selfs.assume_init_mut().get_unchecked_mut(idx) = CoordSet::from_iter(forward[idx].real_coords_lazy().map(|c| c.coerce()));
+            });
+            selfs.assume_init()
+        };
+
         PieceMap { 
             forward, 
             reverse, 
             associations, 
             associations_specific, 
-            neighbours 
+            neighbours,
+            selfs
+        }
+    }
+
+    pub fn coordset(&self, id: usize) -> &CoordSet {
+        unsafe {
+            self.selfs.get_unchecked(id)
         }
     }
 

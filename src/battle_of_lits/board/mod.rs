@@ -79,6 +79,9 @@ pub struct Board<'a> {
     /// Denotes if the game is in the pie rule swap state.
     swapped: bool,
 
+    /// The valid moves on the previous and current turns.
+    valid_moves: (MoveSet, MoveSet),
+
     /// The canonial hash for the gamestate.
     zobrist_hash: u64,
 }
@@ -135,6 +138,7 @@ impl<'a> Board<'a> {
             player_to_move: Player::X,
             score: 0,
             swapped: false,
+            valid_moves: (MoveSet::default(), MoveSet::from_iter(0..NUM_PIECES)),
             zobrist_hash: Board::initial_zobrist_hash(&cells)
         }
     }
@@ -242,47 +246,10 @@ impl<'a> Board<'a> {
         self.score
     }
 
-    /// Undoes a move on the board. Pretty much all that's necessary here is:
-    /// 1. the tetromino is in bounds, and 
-    /// 2. all cells covered by this tetromino are of the expected type
-    /// 
-    /// Condition 2 holds true because if the board is otherwise consistent, all cells of the matching type
-    /// can only flood-fill into the desired shape of the tile, otherwise the board would be in 
-    /// violation of the rule prohibiting tiles of the same type from sharing an edge.
-    pub fn undo(&mut self, mv: usize) -> Result<()> {
-        if self.history.last().map_or(false, |&v| v == mv) {
-            self.undo_unchecked(&self.piecemap.get_piece(mv), mv);
-            Ok(())
-        } else {
-            let real_prev = self.history.last();
-            Err(anyhow!("move {mv} is not the last piece in this position, {real_prev:?} is"))
-        }
-    }
-
-    // Undoes the passing operation.
-    pub fn unpass(&mut self) -> Result<()> {
-        if self.swapped && self.history.len() == 1 {
-            self.swap();
-            Ok(())
-        } else {
-            Err(anyhow!("can only unpass if the last move was to swap"))
-        }
-    }
-
-    /// Unpasses; engine use only.
-    pub fn unpass_unchecked_engine(&mut self) -> () {
-        self.swap();
-    }
-
-    /// Undoes a move with no checks; engine use only.
-    pub fn undo_unchecked_engine(&mut self, mv: usize) -> () {
-        self.undo_unchecked(&self.piecemap.get_piece(mv), mv);
-    }
-
     /// Returns a set of valid moves in the current position. Does so using _m a g i c_, computing 99% of
     /// validity checks in constant time and saving n-piece foursquare detection for last.
     pub fn valid_moves(&self, moves: &mut Vec<usize>) {
-        self._compute_valid_moves(moves);
+        self.valid_moves.1.iter().collect_into(moves);
     }
 
     /// Gets a hash for the position. Since the searcher maintains an instance over

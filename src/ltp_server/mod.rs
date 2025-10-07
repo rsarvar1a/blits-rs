@@ -10,6 +10,7 @@ use crate::prelude::*;
 pub struct LTPServer {
     agent: BLITSAgent,
     board: Option<Board<'static>>,
+    past_boards: Vec<Board<'static>>,
     piecemap: &'static PieceMap,
     #[allow(dead_code)]
     config: LTPServerOptions,
@@ -22,6 +23,7 @@ impl LTPServer {
         LTPServer {
             agent: options.agent_config().get_agent(piecemap),
             board: None,
+            past_boards: vec![],
             piecemap,
             config: options,
             dirty: true
@@ -115,7 +117,9 @@ impl LTPServer {
                     self.agent.new(Some(setup));
                 }
 
+                self.past_boards = vec![];
                 for mv in moves {
+                    self.past_boards.push(self.get().clone());
                     let MoveString { repr: _, tetromino } = mv;
                     match tetromino {
                         Some(t) => {
@@ -151,6 +155,8 @@ impl LTPServer {
         if args.is_empty() {
             return Err(anyhow!("no move provided"));
         }
+
+        self.past_boards.push(self.get().clone());
 
         let MoveString { repr: _, tetromino } = args[0].parse::<MoveString>()?;
         match tetromino {
@@ -194,8 +200,8 @@ impl LTPServer {
     fn undo_move(&mut self, _args: &[&str]) -> Result<()> {
         self.ensure_started()?;
 
-        let mv = self.agent.undo_move()?;
-        self.get_mut().undo(mv)?;
+        self.agent.undo_move()?;
+        self.board = Some(self.past_boards.pop().unwrap());
         self.dirty = true;
 
         println!("{}", self.get().notate());
