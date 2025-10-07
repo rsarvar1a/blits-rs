@@ -53,7 +53,7 @@ impl SetOps<usize, usize> for MoveSet {
         self
     }
 
-    fn extend(&mut self, iter: impl Iterator<Item = usize>) -> &mut Self {
+    fn _extend(&mut self, iter: impl Iterator<Item = usize>) -> &mut Self {
         iter.into_iter().for_each(|i| {
             self.insert(i);
         });
@@ -179,5 +179,13 @@ mod tests {
         let recovered = s.iter().collect::<BTreeSet<_>>();
 
         assert!(elements == recovered) 
+    }
+}
+
+impl std::iter::Extend<usize> for MoveSet {
+    fn extend<T: IntoIterator<Item = usize>>(&mut self, iter: T) {
+        iter.into_iter().for_each(|mv| {
+            self.insert(mv);
+        });
     }
 }

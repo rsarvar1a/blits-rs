@@ -26,7 +26,7 @@ pub trait SetOps<T: Clone + Copy + std::fmt::Debug, I> {
     fn remove(&mut self, value: T) -> &mut Self;
 
     /// Extends the set from an iterator of compatible values.
-    fn extend(&mut self, iter: impl Iterator<Item = I>) -> &mut Self;
+    fn _extend(&mut self, iter: impl Iterator<Item = I>) -> &mut Self;
 
     /// Drops from the set all elements found in the iterator.
     fn filter(&mut self, iter: impl Iterator<Item = I>) -> &mut Self;
