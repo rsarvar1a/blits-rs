@@ -122,3 +122,13 @@ impl BoardCell {
         BoardCell((self.0 & antimask) | v) // tl;dr: mask out the value being replaced, then include the shifted bits of the new value
     }
 }
+
+impl std::fmt::Display for BoardCell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.covered() {
+            write!(f, "{}", self.lits_value().unwrap())
+        } else {
+            write!(f, "{}", Player::repr(self.cell_value()))
+        }
+    }
+}

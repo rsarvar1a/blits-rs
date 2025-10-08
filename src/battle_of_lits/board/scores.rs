@@ -14,18 +14,29 @@ impl<'a> Board<'a> {
             self.score()
         };
         s_visible_symbols
+
+        // // CoordSet of neighbours for each covered cell.
+        // let sets = self.cover.iter().map(|c| {
+        //     self.piecemap.coord_neighbours(&c)
+        // });
+
+        // // Fastest possible vectorized union over neighboursets.
+        // let mut all_neighbours = CoordSet::union_many(sets);
         
-        // let s_protected = {
-        //     let reachable_coords = CoordSet::union_many(self.valid_moves.1.iter().filter(|mv| *mv != NULL_MOVE).map(|mv| self.piecemap.coordset(mv))); // reachable via next move
-        //     let unreachable_coords = (!reachable_coords).difference(&self.cover); // not reachable via next move, and not already played
+        // // All neighbouring cells with foursquare protection are guaranteed on this board.
+        // // This unfortunately misses regions of the board that are genuinely unreachable (not neighbours)
+        // // in which a move cannot be played, but the cells themselves are not foursquare.
+        // let protected = all_neighbours.difference_inplace(&self.cover).iter().filter(|c| {
+        //     self.foursquare_mask.three(c)
+        // });
 
-        //     unreachable_coords.iter().filter(|c| { // all unreachable uncovered cells that are actually foursquare-protected
-        //         self.foursquare_mask.three(c)
-        //     }).map(|c| {
-        //         self.get_unchecked(&c).cell_value().map_or(0, |v| v.perspective()) // count for their player on the board
-        //     }).sum::<i16>()
-        // };
+        // // Sum up all protected cells in their respective players' favours.
+        // let s_protected = protected.map(|c| {
+        //     self.get_unchecked(&c).cell_value().map_or(0, |v| v.perspective())
+        // }).sum::<i16>();
 
+        // // We care more about protected cells than about onboard score, since the latter
+        // // tends to equalize every pair of moves on a competitive board anyways.
         // 100 * s_protected + s_visible_symbols
     }
 }

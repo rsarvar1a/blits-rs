@@ -9,6 +9,9 @@ pub struct LTPServerOptions {
     #[arg(short, long)]
     pub num_threads: Option<usize>,
 
+    #[arg(short, long, default_value_t = false)]
+    pub mcts: bool,
+
     #[arg(short, long, default_value_t = true)]
     pub ponder: bool,
 
@@ -31,6 +34,10 @@ impl LTPServerOptions {
 
         if let Some(num_threads) = self.num_threads {
             config.parallel_opts = config.parallel_opts.with_num_threads(num_threads);
+            config.mcts_opts = config.mcts_opts.with_num_threads(num_threads);
+        }
+        if self.mcts {
+            config.selected = WhichStrategy::MCTS;
         }
         if self.ponder {
             config.parallel_opts = config.parallel_opts.with_background_pondering();
@@ -43,6 +50,7 @@ impl LTPServerOptions {
         }
         if self.verbose {
             config.search_opts = config.search_opts.verbose();
+            config.mcts_opts = config.mcts_opts.verbose();
         }
         if let Some(window_size) = self.window {
             config.search_opts = config.search_opts.with_aspiration_window(window_size as minimax::Evaluation);

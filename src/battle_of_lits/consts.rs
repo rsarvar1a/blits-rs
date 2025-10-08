@@ -14,7 +14,24 @@ pub enum Player {
     O = 1,
 }
 
+impl std::fmt::Display for Player {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Player::X => "❌",
+            Player::O => "⭕"
+        })
+    }
+}
+
 impl Player {
+    pub fn repr(p: Option<Player>) -> String {
+        if p.is_some() {
+            format!("{}", p.unwrap())
+        } else {
+            "⬛".into()
+        }
+    }
+
     /// Notates the player.
     pub fn notate(&self) -> String {
         match self {
@@ -84,6 +101,17 @@ pub enum Tile {
     I = 1,
     T = 2,
     S = 3,
+}
+
+impl std::fmt::Display for Tile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Tile::L => "🟥",
+            Tile::I => "🟨",
+            Tile::T => "🟩",
+            Tile::S => "🟦"
+        })
+    }
 }
 
 impl From<u8> for Tile {

@@ -1,6 +1,6 @@
 use crate::battle_of_lits::{prelude::*, tetromino::piecemap::Interaction};
 
-const GAME_LENGTH_LOWER_BOUND: usize = 10;
+const GAME_LENGTH_LOWER_BOUND: usize = 8;
 
 impl<'a> Board<'a> {
     /// Plays a move onto the board unchecked; engine use only.
@@ -12,9 +12,6 @@ impl<'a> Board<'a> {
             tetromino.real_coords_lazy().for_each(|c| {
                 self.set_lits_unchecked(&c.coerce(), Some(tetromino.kind));
             });
-
-            self.valid_moves.0 = self.valid_moves.1;
-            self.valid_moves.1 = self.valid_moves_set();
         }
 
         { // amortized state calculations
@@ -60,19 +57,23 @@ impl<'a> Board<'a> {
         };
 
         let history: MoveSet = self.history.iter().collect();
-        let mut candidates = MoveSet::default();
-        
-        history.iter().map(|mv| {
-            self.piecemap.with_interaction(mv, Interaction::Adjacent)
-        }).for_each(|set| { candidates.union_inplace(set); });
+        let mut valid_moves: MoveSet = MoveSet::default();
 
-        history.iter().map(|mv| {
-            self.piecemap.with_interaction(mv, Interaction::Conflicting)
-        }).for_each(|set| { candidates.difference_inplace(set); });
+        let adjacents = MoveSet::union_many(
+            history.iter() // insert adjacencies to current history
+                .map(|p| self.piecemap.with_interaction(p, Interaction::Adjacent))
+        );
+        valid_moves.union_inplace(&adjacents);
 
-        candidates.difference_inplace(&history);
+        let conflicts = MoveSet::union_many(
+            history.iter() // remove conflicts with current history
+                .map(|p| self.piecemap.with_interaction(p, Interaction::Conflicting))
+        );
+        valid_moves.difference_inplace(&conflicts);
 
-        candidates.iter().any(|candidate| {
+        valid_moves.difference_inplace(&history); // remove played moves
+
+        valid_moves.iter().any(|candidate| {
             let kind = self.piecemap.get_kind(candidate);
             if unsafe { *self.piece_bag.get_unchecked(kind as usize) == 0 } {       // not even one adjacent piece on board
                 return false;
@@ -107,14 +108,18 @@ impl<'a> Board<'a> {
         let history: MoveSet = self.history.iter().collect();
         let mut valid_moves: MoveSet = MoveSet::default();
 
-        history.iter() // insert adjacencies to current history
-            .map(|p| self.piecemap.with_interaction(p, Interaction::Adjacent))
-            .for_each(|set| { valid_moves.union_inplace(set); });  
-        
-        history.iter() // remove conflicts with current history
-            .map(|p| self.piecemap.with_interaction(p, Interaction::Conflicting))
-            .for_each(|set| { valid_moves.difference_inplace(set); });
-        
+        let adjacents = MoveSet::union_many(
+            history.iter() // insert adjacencies to current history
+                .map(|p| self.piecemap.with_interaction(p, Interaction::Adjacent))
+        );
+        valid_moves.union_inplace(&adjacents);
+
+        let conflicts = MoveSet::union_many(
+            history.iter() // remove conflicts with current history
+                .map(|p| self.piecemap.with_interaction(p, Interaction::Conflicting))
+        );
+        valid_moves.difference_inplace(&conflicts);
+
         valid_moves.difference_inplace(&history); // remove played moves
 
         valid_moves
@@ -135,7 +140,7 @@ impl<'a> Board<'a> {
             }).collect()
     }
 
-    pub fn _compute_valid_moves(&self, moves: &mut MoveSet) {
+    pub fn _compute_valid_moves<T: Extend<usize>>(&self, moves: &mut T) {
         match self.history.len() {
             0 => { 
                 moves.extend(0..NUM_PIECES);
@@ -143,9 +148,9 @@ impl<'a> Board<'a> {
             },
             1 => { 
                 let mvs = self.piecemap.with_interaction(self.history[0], Interaction::Adjacent);
-                moves.union_inplace(mvs);
+                moves.extend(mvs.iter());
                 if !self.swapped {
-                    moves.insert(NULL_MOVE);
+                    moves.extend(Some(NULL_MOVE));
                 }
                 return;
             },
@@ -155,14 +160,18 @@ impl<'a> Board<'a> {
         let history: MoveSet = self.history.iter().collect();
         let mut valid_moves: MoveSet = MoveSet::default();
 
-        history.iter() // insert adjacencies to current history
-            .map(|p| self.piecemap.with_interaction(p, Interaction::Adjacent))
-            .for_each(|set| { valid_moves.union_inplace(set); });  
-        
-        history.iter() // remove conflicts with current history
-            .map(|p| self.piecemap.with_interaction(p, Interaction::Conflicting))
-            .for_each(|set| { valid_moves.difference_inplace(set); });
-        
+        let adjacents = MoveSet::union_many(
+            history.iter() // insert adjacencies to current history
+                .map(|p| self.piecemap.with_interaction(p, Interaction::Adjacent))
+        );
+        valid_moves.union_inplace(&adjacents);
+
+        let conflicts = MoveSet::union_many(
+            history.iter() // remove conflicts with current history
+                .map(|p| self.piecemap.with_interaction(p, Interaction::Conflicting))
+        );
+        valid_moves.difference_inplace(&conflicts);
+
         valid_moves.difference_inplace(&history); // remove played moves
 
         valid_moves
@@ -236,8 +245,6 @@ impl<'a> Board<'a> {
                     foursquare.update_unchecked(&c.coerce(), Some(piece.kind));
                 });
                 !piece.real_coords_lazy().any(|c| foursquare.any(&c.coerce()))
-            }).for_each(|p| {
-                moves.push(p);
-            });
+            }).collect_into(moves);
     }
 }

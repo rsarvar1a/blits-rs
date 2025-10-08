@@ -58,6 +58,7 @@ impl LTPServer {
             | "options" => self.options(args),
             | "play" => self.play_move(args),
             | "pv" => self.principal_variation(args),
+            | "print" => self.print(args),
             | "quit" => exit(0),
             | "score" => self.score(args),
             | "swap" => self.play_move(&["swap"]),
@@ -186,6 +187,13 @@ impl LTPServer {
         let pv = self.agent.principal_variation();
         let repr = pv.iter().map(|mv| self.piecemap.notate(*mv)).join("; ");
         println!("{}", repr);
+        Ok(())
+    }
+
+    fn print(&mut self, _args: &[&str]) -> Result<()> {
+        self.ensure_started()?;
+
+        println!("{}", self.get().pretty());
         Ok(())
     }
 

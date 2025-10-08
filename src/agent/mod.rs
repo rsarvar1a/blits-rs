@@ -7,12 +7,12 @@ use crate::battle_of_lits::prelude::*;
 
 pub use evaluator::Evaluator;
 pub use game::LITSGame;
-use minimax::{IterativeOptions, ParallelOptions, Strategy};
+use minimax::{strategies::mcts, IterativeOptions, MCTSOptions, ParallelOptions, Strategy};
 
 /// An implementation of the actual blits engine.
 pub struct BLITSAgent {
     board: Board<'static>,
-    strategy: minimax::ParallelSearch<Evaluator>,
+    strategy: Box<dyn Strategy<LITSGame>>,
     piecemap: &'static PieceMap,
     past: Vec<usize>,
     past_boards: Vec<Board<'static>>,
@@ -116,9 +116,16 @@ impl BLITSAgent {
     }
 }
 
+pub enum WhichStrategy {
+    MCTS,
+    Negamax
+}
+
 pub struct AgentConfig {
     pub search_opts: minimax::IterativeOptions,
     pub parallel_opts: minimax::ParallelOptions,
+    pub mcts_opts: minimax::MCTSOptions,
+    pub selected: WhichStrategy,
 }
 
 impl Default for AgentConfig {
@@ -129,7 +136,10 @@ impl Default for AgentConfig {
                 .with_countermove_history()
                 .with_table_byte_size(200 << 20),
             parallel_opts: ParallelOptions::new()
-                .with_num_threads(std::thread::available_parallelism().map_or(1, |v| v.into()))
+                .with_num_threads(std::thread::available_parallelism().map_or(1, |v| v.into())),
+            mcts_opts: MCTSOptions::default()
+                .with_num_threads(std::thread::available_parallelism().map_or(1, |v| v.into())),
+            selected: WhichStrategy::Negamax
         }
     }
 }
@@ -142,13 +152,23 @@ impl AgentConfig {
 
     /// Produces an agent.
     pub fn get_agent(&self, piecemap: &'static PieceMap) -> BLITSAgent {
-        BLITSAgent { 
-            board: Board::new(None, piecemap), 
-            strategy: minimax::ParallelSearch::new(Evaluator::default(), self.search_opts, self.parallel_opts),
-            piecemap,
-            past: vec![],
-            past_boards: vec![],
-            future: vec![] 
+        match self.selected {
+            WhichStrategy::Negamax => BLITSAgent { 
+                board: Board::new(None, piecemap), 
+                strategy: Box::new(minimax::ParallelSearch::new(Evaluator::default(), self.search_opts, self.parallel_opts)),
+                piecemap,
+                past: vec![],
+                past_boards: vec![],
+                future: vec![] 
+            },
+            WhichStrategy::MCTS => BLITSAgent { 
+                board: Board::new(None, piecemap), 
+                strategy: Box::new(mcts::MonteCarloTreeSearch::new(self.mcts_opts.clone())), 
+                piecemap, 
+                past: vec![], 
+                past_boards: vec![], 
+                future: vec![]
+            }
         }
     }
 }

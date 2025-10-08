@@ -33,6 +33,9 @@ pub struct PieceMap {
     /// Get the tetrominos that have a specific interaction with the subject tetromino. 
     associations_specific: [[MoveSet; 3]; NUM_PIECES],
 
+    /// Neighbours as coordsets for specific inbounds coords.
+    coord_neighbours: Box<[CoordSet; 100]>,
+
     /// Get the neighbouring coords to the tetromino.
     neighbours: Box<[CoordSet; NUM_PIECES]>,
 
@@ -128,16 +131,44 @@ impl PieceMap {
             selfs.assume_init()
         };
 
+        let coord_neighbours = unsafe {
+            let mut neighbours: Box<MaybeUninit<[CoordSet; 100]>> = Box::new_zeroed();
+            (0..10).cartesian_product(0..10).for_each(|(row, col)| {
+                let idx = row * BOARD_SIZE + col;
+                let c = Coord { row, col };
+                let mut set = CoordSet::default();
+                ORTHOGONAL_OFFSETS.iter().for_each(|offset| {
+                    let candidate = c + offset;
+                    if candidate.in_bounds_signed() {
+                        set.insert(&candidate.coerce());
+                    }
+                });
+                *neighbours.assume_init_mut().get_unchecked_mut(idx) = set;
+            });
+            neighbours.assume_init()
+        };
+
         PieceMap { 
             forward, 
             reverse, 
             associations, 
             associations_specific, 
+            coord_neighbours,
             neighbours,
             selfs
         }
     }
 
+    /// Gets a coordset consisting of the on-board neighbours of an on-board Coord.
+    pub fn coord_neighbours(&self, coord: &Coord) -> &CoordSet {
+        unsafe {
+            let Coord { row, col } = *coord;
+            let idx = row * BOARD_SIZE + col;
+            self.coord_neighbours.get_unchecked(idx)
+        }
+    }
+
+    /// Gets the piece as a coordset.
     pub fn coordset(&self, id: usize) -> &CoordSet {
         unsafe {
             self.selfs.get_unchecked(id)
