@@ -2,26 +2,45 @@
 use crate::prelude::*;
 use itertools::Itertools;
 
-type SubSet = u16;
-const SUBSET_SIZE: usize = BOARD_SIZE;
-const NUM_SUBSETS: usize = (BOARD_SIZE / 4 + 1) * 4;
+type SubSet = u64;
+const NUM_SUBSETS: usize = 2;
+const BOARD_CELLS: usize = BOARD_SIZE * BOARD_SIZE; // 100 cells for 10x10 board
 
 #[derive(Clone, Copy, Debug)]
 pub struct CoordSet([SubSet; NUM_SUBSETS]);
 
+// Mask for the second u64 to zero out unused bits (36-63)
+const EXTENT_MASK: SubSet = (1u64 << (BOARD_CELLS - 64)) - 1; // Mask for bits 0-35
+
 impl CoordSet {
     #[inline]
     fn _index(coord: &Coord) -> (usize, usize) {
-        (coord.row, coord.col)
+        let linear_index = coord.row * BOARD_SIZE + coord.col;
+        (linear_index / 64, linear_index % 64)
     }
 
     pub fn neg_inplace(&mut self) -> & mut Self {
-        self.0.iter_mut().for_each(|sub| {
-            // we can just flip every relevant bit to change the presence of each Coord,
-            // but we can't leave the high bits set from 0 -> 1, so we set them back to 0 using the mask
-            *sub = !*sub & EXTENT_MASK;
-        });
+        self.0[0] = !self.0[0];
+        self.0[1] = (!self.0[1]) & EXTENT_MASK;
         self
+    }
+
+    /// Fast check if intersection would be empty without allocating
+    #[inline]
+    pub fn intersects(&self, other: &Self) -> bool {
+        (self.0[0] & other.0[0]) != 0 || (self.0[1] & other.0[1]) != 0
+    }
+
+    /// Fast in-place intersection test that returns whether result would be empty
+    #[inline]
+    pub fn would_intersect_empty(&self, other: &Self) -> bool {
+        !self.intersects(other)
+    }
+
+    /// Fast count of elements without allocation - optimized for small sets
+    #[inline]
+    pub fn count_fast(&self) -> usize {
+        self.0[0].count_ones() as usize + self.0[1].count_ones() as usize
     }
 }
 
@@ -38,7 +57,7 @@ impl SetOps<&Coord, Coord> for CoordSet {
     }
 
     fn len(&self) -> usize {
-        self.0.iter().map(|sub| sub.count_ones() as usize).sum()
+        self.count_fast()
     }
 
     fn iter<'a>(&'a self) -> impl Iterator<Item = Coord> {
@@ -84,10 +103,13 @@ impl SetOps<&Coord, Coord> for CoordSet {
     }
 
     fn intersect_inplace(&mut self, other: &Self) -> &mut Self {
-        self.0.iter_mut().zip(other.0.iter()).for_each(|(l, r)| {
-            *l &= r;
-        });
+        self.0[0] &= other.0[0];
+        self.0[1] &= other.0[1];
         self
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0[0] == 0 && self.0[1] == 0
     }
 
     fn union(&self, other: &Self) -> Self {
@@ -97,9 +119,8 @@ impl SetOps<&Coord, Coord> for CoordSet {
     }
 
     fn union_inplace(&mut self, other: &Self) -> &mut Self {
-        self.0.iter_mut().zip(other.0.iter()).for_each(|(l, r)| {
-            *l |= r;
-        });
+        self.0[0] |= other.0[0];
+        self.0[1] |= other.0[1];
         self
     }
 
@@ -110,9 +131,8 @@ impl SetOps<&Coord, Coord> for CoordSet {
     }
 
     fn difference_inplace(&mut self, other: &Self) -> &mut Self {
-        self.0.iter_mut().zip(other.0.iter()).for_each(|(l, r)| {
-            *l &= !r;
-        });
+        self.0[0] &= !other.0[0];
+        self.0[1] &= !other.0[1];
         self
     }
 }
@@ -160,12 +180,20 @@ impl<'a> Iterator for CoordSetIterator<'a> {
             let subject = self.data[self.current_subset] & self.mask;
             let tz = subject.trailing_zeros() as usize;
 
-            if tz >= SUBSET_SIZE {
+            if tz >= 64 {
                 self.current_subset += 1;
                 self.mask = SubSet::MAX;
                 continue;
             } else {
-                let value = Coord::new(self.current_subset, tz);
+                let linear_index = self.current_subset * 64 + tz;
+                if linear_index >= BOARD_CELLS {
+                    self.current_subset += 1;
+                    self.mask = SubSet::MAX;
+                    continue;
+                }
+                let row = linear_index / BOARD_SIZE;
+                let col = linear_index % BOARD_SIZE;
+                let value = Coord::new(row, col);
                 self.mask ^= (1 as SubSet) << tz;
                 return Some(value);
             }
@@ -196,12 +224,20 @@ impl Iterator for CoordSetIntoIterator {
             let subject = self.data[self.current_subset] & self.mask;
             let tz = subject.trailing_zeros() as usize;
 
-            if tz >= SUBSET_SIZE {
+            if tz >= 64 {
                 self.current_subset += 1;
                 self.mask = SubSet::MAX;
                 continue;
             } else {
-                let value = Coord::new(self.current_subset, tz);
+                let linear_index = self.current_subset * 64 + tz;
+                if linear_index >= BOARD_CELLS {
+                    self.current_subset += 1;
+                    self.mask = SubSet::MAX;
+                    continue;
+                }
+                let row = linear_index / BOARD_SIZE;
+                let col = linear_index % BOARD_SIZE;
+                let value = Coord::new(row, col);
                 self.mask ^= (1 as SubSet) << tz;
                 return Some(value);
             }
@@ -224,11 +260,6 @@ impl<'a> IntoIterator for &'a CoordSet {
         CoordSetIterator::new(&self.0)
     }
 }
-
-const EXTENT_MASK: SubSet = {
-    let ones = ((1 as SubSet) << SUBSET_SIZE) - 1; // place a bit at the desired cap to get a bitstring like 0000010000000000, then subtract to get 0000001111111111
-    ones
-};
 
 impl std::ops::Neg for CoordSet {
     type Output = CoordSet;

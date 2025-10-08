@@ -1,4 +1,4 @@
-use crate::battle_of_lits::{prelude::*, tetromino::piecemap::Interaction};
+use crate::battle_of_lits::prelude::*;
 
 const GAME_LENGTH_LOWER_BOUND: usize = 8;
 
@@ -19,11 +19,15 @@ impl<'a> Board<'a> {
             self.neighbours
                 .union_inplace(self.piecemap.neighbours(id)) // add all the new neighbours
                 .difference_inplace(&self.cover); // remove anything conflicting (either in the new neighbours, or from the just-played piece)
+            
+            // Update unreachable cells after piece placement
+            self.update_unreachable_cells();
         }
 
         { // meta information
             self.zobrist_hash ^= self.move_hash(id); // add the move to the hash
             self.history.push(id);
+            self.played.insert(id); // O(1) lookup for future operations
             self.next_player();
         }
     }

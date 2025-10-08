@@ -4,10 +4,9 @@ pub(crate) mod indexing;
 pub(crate) mod moves;
 pub(crate) mod neighbours;
 pub(crate) mod pretty;
+pub(crate) mod reachability;
 pub(crate) mod scores;
 pub(crate) mod zobrist;
-
-use crate::battle_of_lits::tetromino::piecemap::PieceMap;
 
 use super::prelude::*;
 
@@ -60,10 +59,20 @@ pub struct Board<'a> {
     /// we can quickly obtain a moveset for conflict resolution operations like move validity.
     history: Vec<usize>,
 
+    /// Set of played piece IDs for O(1) lookup instead of O(n) Vec::contains.
+    /// Updated incrementally in play_unchecked and undo operations.
+    played: MoveSet,
+
     /// A collection of _all_ neighbouring cells to pieces on this board, obviously excluding covered ones.
     /// 
     /// This is useful for some heuristics, but keep in mind that many adjacent uncovered cells are actually unreachable!
     neighbours: CoordSet,
+
+    /// A collection of cells that are mathematically unreachable due to constraints.
+    /// 
+    /// Once a cell becomes unreachable (due to connectivity, foursquare, or shape constraints),
+    /// it remains unreachable for the rest of the game.
+    unreachable: CoordSet,
 
     /// The number of pieces remaining in each type.
     piece_bag: [usize; 4],
@@ -130,7 +139,9 @@ impl<'a> Board<'a> {
             edge_mask: EdgeCounter::default(),
             foursquare_mask: FoursquareCounter::default(),
             history: Vec::with_capacity(20),
+            played: MoveSet::default(),
             neighbours: CoordSet::default(),
+            unreachable: CoordSet::default(),
             piece_bag: [PIECES_PER_KIND; 4],
             piecemap,
             player_to_move: Player::X,

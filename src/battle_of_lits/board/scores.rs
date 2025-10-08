@@ -10,33 +10,76 @@ impl<'a> Board<'a> {
     ///   - (these are "earnable" points in the opposite player's favour, at a reduced rate)
     ///   - we are basically rewarding a player if they have a breadth of choice in their attack 
     pub(super) fn _true_effective_score(&self) -> i16 {
-        let s_visible_symbols = {
-            self.score()
-        };
-        s_visible_symbols
-
-        // // CoordSet of neighbours for each covered cell.
-        // let sets = self.cover.iter().map(|c| {
-        //     self.piecemap.coord_neighbours(&c)
-        // });
-
-        // // Fastest possible vectorized union over neighboursets.
-        // let mut all_neighbours = CoordSet::union_many(sets);
-        
-        // // All neighbouring cells with foursquare protection are guaranteed on this board.
-        // // This unfortunately misses regions of the board that are genuinely unreachable (not neighbours)
-        // // in which a move cannot be played, but the cells themselves are not foursquare.
-        // let protected = all_neighbours.difference_inplace(&self.cover).iter().filter(|c| {
-        //     self.foursquare_mask.three(c)
-        // });
-
-        // // Sum up all protected cells in their respective players' favours.
-        // let s_protected = protected.map(|c| {
-        //     self.get_unchecked(&c).cell_value().map_or(0, |v| v.perspective())
-        // }).sum::<i16>();
-
-        // // We care more about protected cells than about onboard score, since the latter
-        // // tends to equalize every pair of moves on a competitive board anyways.
-        // 100 * s_protected + s_visible_symbols
+        self._true_effective_score_impl()
     }
+    
+    #[allow(dead_code)]
+    /// Moving to an impl so I can toggle on/off without commenting out the code.
+    pub(super) fn _true_effective_score_impl(&self) -> i16 {
+        let material = self.score();
+        let current_player = self.player_to_move();
+        
+        // Calculate unreachable symbols (guaranteed points)
+        // Now enhanced with dependency chains and shadow map detection
+        let unreachable_score = self.unreachable.iter()
+            .map(|coord| {
+                self.get_unchecked(&coord).cell_value().map_or(0, |player| player.perspective())
+            })
+            .sum::<i16>();
+        
+        // Calculate potential unreachable regions using piecemap optimizations
+        // REMOVED: Was consuming 80% of runtime for 10x performance drop
+        let potential_unreachable_score = 0;
+        
+        let (security, threat, connectivity, constraint) = self.neighbours.iter()
+            .map(|coord| {
+                let is_protected = self.foursquare_mask.three(&coord);
+                let cell_value = self.get_unchecked(&coord).cell_value();
+                
+                let security_contrib = if is_protected {
+                    cell_value.map_or(0, |player| player.perspective())
+                } else { 0 };
+                
+                let threat_contrib = if !is_protected {
+                    cell_value.map_or(0, |player| {
+                        if player == current_player {
+                            0
+                        } else {
+                            current_player.perspective()
+                        }
+                    })
+                } else { 0 };
+                
+                let connectivity_contrib = cell_value.map_or(0, |player| {
+                    if player == current_player {
+                        current_player.perspective()
+                    } else { 0 }
+                });
+                
+                let constraint_contrib = if is_protected { 1 } else { 0 };
+                
+                (security_contrib, threat_contrib, connectivity_contrib, constraint_contrib)
+            })
+            .fold((0i16, 0i16, 0i16, 0i16), |(s_acc, t_acc, c_acc, ct_acc), (s, t, c, ct)| {
+                (s_acc + s, t_acc + t, c_acc + c, ct_acc + ct)
+            });
+        
+        let diversity = {
+            let mean = self.piece_bag.iter().sum::<usize>() as f32 / 4.0;
+            let variance = self.piece_bag.iter()
+                .map(|&count| (count as f32 - mean).powi(2))
+                .sum::<f32>() / 4.0;
+            -(variance as i16)
+        };
+
+        material + 
+        500 * unreachable_score +     // Highest weight - these are guaranteed points
+        50 * potential_unreachable_score + // Medium weight - likely future unreachable regions
+        100 * security + 
+        -25 * threat + 
+        15 * connectivity + 
+        -10 * constraint + 
+        5 * diversity
+    }
+
 }

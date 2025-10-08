@@ -1,10 +1,8 @@
-pub mod piecemap;
 pub mod transform;
 
 use super::prelude::*;
 
 use itertools::Itertools;
-pub use piecemap::PieceMap;
 pub use transform::Transform;
 
 #[derive(Clone, Copy, Debug, PartialOrd, Ord)]

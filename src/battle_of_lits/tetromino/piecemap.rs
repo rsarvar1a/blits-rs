@@ -41,6 +41,14 @@ pub struct PieceMap {
 
     /// Get the coordset representation of a piece instead of the array representation.
     selfs: Box<[CoordSet; NUM_PIECES]>,
+
+    /// Critical chokepoints: narrow passages this piece would block if placed.
+    /// These are 1-2 cell wide corridors that become impassable.
+    chokepoints: Box<[Vec<Coord>; NUM_PIECES]>,
+
+    /// Connectivity bridges: pairs of neighbor cells this piece connects together.
+    /// Used for fast connectivity validation without flood fill.
+    bridges: Box<[Vec<(Coord, Coord)>; NUM_PIECES]>,
 }
 
 impl PieceMap {
@@ -148,6 +156,22 @@ impl PieceMap {
             neighbours.assume_init()
         };
 
+        let chokepoints = unsafe {
+            let mut chokepoints: Box<MaybeUninit<[Vec<Coord>; NUM_PIECES]>> = Box::new_zeroed();
+            (0..NUM_PIECES).for_each(|idx| {
+                *chokepoints.assume_init_mut().get_unchecked_mut(idx) = Self::compute_chokepoints(&forward[idx]);
+            });
+            chokepoints.assume_init()
+        };
+
+        let bridges = unsafe {
+            let mut bridges: Box<MaybeUninit<[Vec<(Coord, Coord)>; NUM_PIECES]>> = Box::new_zeroed();
+            (0..NUM_PIECES).for_each(|idx| {
+                *bridges.assume_init_mut().get_unchecked_mut(idx) = Self::compute_connectivity_bridges(&forward[idx]);
+            });
+            bridges.assume_init()
+        };
+
         PieceMap { 
             forward, 
             reverse, 
@@ -155,7 +179,9 @@ impl PieceMap {
             associations_specific, 
             coord_neighbours,
             neighbours,
-            selfs
+            selfs,
+            chokepoints,
+            bridges
         }
     }
 
@@ -172,6 +198,20 @@ impl PieceMap {
     pub fn coordset(&self, id: usize) -> &CoordSet {
         unsafe {
             self.selfs.get_unchecked(id)
+        }
+    }
+
+    /// Gets the critical chokepoints this piece would block.
+    pub fn chokepoints(&self, id: usize) -> &Vec<Coord> {
+        unsafe {
+            self.chokepoints.get_unchecked(id)
+        }
+    }
+
+    /// Gets the connectivity bridges this piece creates between neighbor cells.
+    pub fn bridges(&self, id: usize) -> &Vec<(Coord, Coord)> {
+        unsafe {
+            self.bridges.get_unchecked(id)
         }
     }
 
@@ -243,6 +283,188 @@ impl PieceMap {
         unsafe {
             self.associations_specific.get_unchecked(id).get_unchecked(interaction as usize)
         }
+    }
+
+    /// Computes critical chokepoints that would be blocked by placing this piece.
+    /// 
+    /// A chokepoint is a narrow passage (1-2 cells wide) that becomes impassable
+    /// when this piece is placed, potentially isolating board regions.
+    fn compute_chokepoints(piece: &Tetromino) -> Vec<Coord> {
+        let mut chokepoints = Vec::new();
+        let piece_coords: std::collections::HashSet<_> = piece.real_coords_lazy()
+            .map(|c| c.coerce())
+            .collect();
+
+        // Check each neighbor of the piece for chokepoint patterns
+        for piece_coord in piece_coords.iter() {
+            for offset in coords::ORTHOGONAL_OFFSETS.iter() {
+                let neighbor = *piece_coord + offset;
+                if !neighbor.in_bounds_signed() {
+                    continue;
+                }
+                let neighbor_coord = neighbor.coerce();
+                
+                // Skip if neighbor is occupied by the piece itself
+                if piece_coords.contains(&neighbor_coord) {
+                    continue;
+                }
+
+                // Check if this neighbor position creates a chokepoint
+                if Self::is_chokepoint_position(&piece_coords, &neighbor_coord) {
+                    chokepoints.push(neighbor_coord);
+                }
+            }
+        }
+
+        chokepoints
+    }
+
+    /// Determines if a position creates a chokepoint when combined with piece placement.
+    /// 
+    /// Detects narrow corridors (1-2 cells wide) that would be blocked.
+    fn is_chokepoint_position(piece_coords: &std::collections::HashSet<Coord>, pos: &Coord) -> bool {
+        // Check for narrow horizontal corridors
+        let blocks_horizontal = Self::blocks_horizontal_corridor(piece_coords, pos);
+        
+        // Check for narrow vertical corridors  
+        let blocks_vertical = Self::blocks_vertical_corridor(piece_coords, pos);
+        
+        // Check for corner positions that create isolation
+        let blocks_corner = Self::blocks_corner_access(piece_coords, pos);
+
+        blocks_horizontal || blocks_vertical || blocks_corner
+    }
+
+    /// Checks if piece blocks a narrow horizontal corridor.
+    fn blocks_horizontal_corridor(piece_coords: &std::collections::HashSet<Coord>, pos: &Coord) -> bool {
+        // Look for patterns like: wall-empty-empty-wall (2-wide corridor)
+        // or: wall-empty-wall (1-wide corridor)
+        let left = Coord { row: pos.row, col: pos.col.saturating_sub(1) };
+        let right = Coord { row: pos.row, col: (pos.col + 1).min(BOARD_SIZE - 1) };
+        
+        // Check if we're creating a blockage in a 1-2 cell wide horizontal passage
+        let left_blocked = pos.col == 0 || piece_coords.contains(&left);
+        let right_blocked = pos.col == BOARD_SIZE - 1 || piece_coords.contains(&right);
+        
+        left_blocked && right_blocked
+    }
+
+    /// Checks if piece blocks a narrow vertical corridor.
+    fn blocks_vertical_corridor(piece_coords: &std::collections::HashSet<Coord>, pos: &Coord) -> bool {
+        let up = Coord { row: pos.row.saturating_sub(1), col: pos.col };
+        let down = Coord { row: (pos.row + 1).min(BOARD_SIZE - 1), col: pos.col };
+        
+        let up_blocked = pos.row == 0 || piece_coords.contains(&up);
+        let down_blocked = pos.row == BOARD_SIZE - 1 || piece_coords.contains(&down);
+        
+        up_blocked && down_blocked
+    }
+
+    /// Checks if piece blocks corner access, creating isolated regions.
+    fn blocks_corner_access(piece_coords: &std::collections::HashSet<Coord>, pos: &Coord) -> bool {
+        // Check if we're blocking access to corners or edge regions
+        let is_near_edge = pos.row <= 1 || pos.row >= BOARD_SIZE - 2 || 
+                          pos.col <= 1 || pos.col >= BOARD_SIZE - 2;
+        
+        if !is_near_edge {
+            return false;
+        }
+
+        // Count how many orthogonal directions are blocked
+        let mut blocked_directions = 0;
+        for offset in coords::ORTHOGONAL_OFFSETS.iter() {
+            let neighbor = *pos + offset;
+            if !neighbor.in_bounds_signed() || piece_coords.contains(&neighbor.coerce()) {
+                blocked_directions += 1;
+            }
+        }
+
+        // If 3+ directions are blocked, this likely creates isolation
+        blocked_directions >= 3
+    }
+
+    /// Computes connectivity bridges created by placing this piece.
+    /// 
+    /// A bridge connects two neighbor cells that were previously disconnected.
+    /// This is used for fast connectivity validation during reachability analysis.
+    fn compute_connectivity_bridges(piece: &Tetromino) -> Vec<(Coord, Coord)> {
+        let mut bridges = Vec::new();
+        let piece_coords: std::collections::HashSet<_> = piece.real_coords_lazy()
+            .map(|c| c.coerce())
+            .collect();
+
+        // Get all neighbor coordinates around the piece
+        let neighbors: Vec<Coord> = piece_coords.iter()
+            .flat_map(|&coord| {
+                coords::ORTHOGONAL_OFFSETS.iter().filter_map(move |offset| {
+                    let neighbor = coord + offset;
+                    if neighbor.in_bounds_signed() {
+                        let neighbor_coord = neighbor.coerce();
+                        if !piece_coords.contains(&neighbor_coord) {
+                            Some(neighbor_coord)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+
+        // Find pairs of neighbors that this piece bridges together
+        for i in 0..neighbors.len() {
+            for j in (i + 1)..neighbors.len() {
+                let coord1 = neighbors[i];
+                let coord2 = neighbors[j];
+                
+                if Self::piece_bridges_neighbors(&piece_coords, &coord1, &coord2) {
+                    bridges.push((coord1, coord2));
+                }
+            }
+        }
+
+        bridges
+    }
+
+    /// Determines if a piece bridges two neighbor coordinates together.
+    /// 
+    /// Two neighbors are bridged if they can reach each other through the piece
+    /// but would be disconnected without it.
+    fn piece_bridges_neighbors(
+        piece_coords: &std::collections::HashSet<Coord>, 
+        coord1: &Coord, 
+        coord2: &Coord
+    ) -> bool {
+        // Check if both coordinates are reachable from the piece
+        let coord1_touches_piece = Self::coord_touches_piece(piece_coords, coord1);
+        let coord2_touches_piece = Self::coord_touches_piece(piece_coords, coord2);
+        
+        if !coord1_touches_piece || !coord2_touches_piece {
+            return false;
+        }
+
+        // Check if the coordinates are far enough apart that the piece acts as a bridge
+        let distance = ((coord1.row as i32 - coord2.row as i32).abs() + 
+                       (coord1.col as i32 - coord2.col as i32).abs()) as usize;
+        
+        // Coordinates must be at least 2 steps apart to be meaningfully bridged
+        // (adjacent coordinates don't need bridging)
+        distance >= 2
+    }
+
+    /// Checks if a coordinate touches (is adjacent to) the piece.
+    fn coord_touches_piece(piece_coords: &std::collections::HashSet<Coord>, coord: &Coord) -> bool {
+        coords::ORTHOGONAL_OFFSETS.iter().any(|offset| {
+            let neighbor = *coord + offset;
+            if neighbor.in_bounds_signed() {
+                piece_coords.contains(&neighbor.coerce())
+            } else {
+                false
+            }
+        })
     }
 }
 
