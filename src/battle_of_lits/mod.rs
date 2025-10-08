@@ -6,6 +6,7 @@ pub(crate) mod board;
 pub(crate) mod consts;
 pub mod coords;
 pub mod notation;
+pub(crate) mod piecemap;
 pub mod sets;
 pub(crate) mod tetromino;
 
@@ -17,8 +18,9 @@ pub mod prelude {
         consts::*,
         coords::{self, *},
         notation::*,
+        piecemap::{Interaction, PieceMap},
         sets::*,
-        tetromino::{PieceMap, Transform, Tetromino}
+        tetromino::{Transform, Tetromino}
     };
 
     pub use super::sets::SetOps;

@@ -16,6 +16,9 @@ pub trait SetOps<T: Clone + Copy + std::fmt::Debug, I> {
     /// optimizations on the pairwise set operations.
     fn len(&self) -> usize;
 
+    /// Determines whether the set is empty.
+    fn is_empty(&self) -> bool;
+
     /// Iterates over the elements in the set.
     fn iter(&self) -> impl Iterator<Item = I>;
 

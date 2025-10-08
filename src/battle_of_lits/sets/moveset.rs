@@ -2,23 +2,50 @@
 use crate::prelude::{SetOps, NUM_PIECES};
 use itertools::Itertools;
 
-type SubSet = u16;
+type SubSet = u64;
 const SUBSET_SIZE: usize = size_of::<SubSet>() * 8;
 const NUM_SUBSETS: usize = (NUM_PIECES + 1) / SUBSET_SIZE + 1;
+const NUM_SUBSETS_PHYSICAL: usize = (NUM_SUBSETS / 4 + 1) * 4;
 
 #[derive(Clone, Copy, Debug)]
-pub struct MoveSet([SubSet; NUM_SUBSETS]);
+pub struct MoveSet([SubSet; NUM_SUBSETS_PHYSICAL]);
 
 impl MoveSet {
     #[inline]
     fn _index(value: usize) -> (usize, usize) {
         (value / SUBSET_SIZE, value % SUBSET_SIZE)
     }
+
+    /// Returns a MoveSet containing all possible moves (0..NUM_PIECES) in constant time.
+    pub fn all() -> Self {
+        let mut set = MoveSet::default();
+        // Set all bits for complete pieces, and mask the last subset for NUM_PIECES
+        for i in 0..(NUM_SUBSETS - 1) {
+            set.0[i] = SubSet::MAX;
+        }
+        // Handle the last subset with proper masking
+        const REMAINING_PIECES: usize = NUM_PIECES % SUBSET_SIZE;
+        const MASK: u64 = (1 << REMAINING_PIECES) - 1;
+        set.0[NUM_SUBSETS - 1] = MASK;
+        set
+    }
+
+
+    /// Returns a MoveSet containing every step_by-th move for efficient sampling.
+    /// Uses bit manipulation tricks for common step_by values.
+    pub fn sampled(step_by: usize) -> Self {
+        let mut set = MoveSet::default();        
+        for piece_id in (0..NUM_PIECES).step_by(step_by) {
+            set.insert(piece_id);
+        }
+        
+        set
+    }
 }
 
 impl Default for MoveSet {
     fn default() -> Self {
-        MoveSet([SubSet::default(); NUM_SUBSETS])
+        MoveSet([SubSet::default(); NUM_SUBSETS_PHYSICAL])
     }
 }
 
@@ -29,7 +56,14 @@ impl SetOps<usize, usize> for MoveSet {
     }
 
     fn len(&self) -> usize {
-        self.0.iter().map(|sub| sub.count_ones() as usize).sum()
+        // Manual unroll to eliminate iterator overhead in hot path
+        let mut count = 0;
+        for i in 0..NUM_SUBSETS {
+            unsafe {
+                count += self.0.get_unchecked(i).count_ones() as usize;
+            }
+        }
+        count
     }
 
     fn iter<'a>(&'a self) -> impl Iterator<Item = usize> {
@@ -81,6 +115,10 @@ impl SetOps<usize, usize> for MoveSet {
         self
     }
 
+    fn is_empty(&self) -> bool {
+        self.iter().next().is_none()
+    }
+
     fn union(&self, other: &Self) -> Self {
         let mut s = self.clone();
         s.union_inplace(other);
@@ -129,13 +167,13 @@ impl FromIterator<usize> for MoveSet {
 }
 
 pub struct MoveSetIterator<'a> {
-    data: &'a [SubSet; NUM_SUBSETS],
+    data: &'a [SubSet; NUM_SUBSETS_PHYSICAL],
     mask: SubSet,
     current_subset: usize,
 }
 
 impl<'a> MoveSetIterator<'a> {
-    pub fn new<'d>(data: &'d [SubSet; NUM_SUBSETS]) -> MoveSetIterator<'d> {
+    pub fn new<'d>(data: &'d [SubSet; NUM_SUBSETS_PHYSICAL]) -> MoveSetIterator<'d> {
         MoveSetIterator { data, mask: SubSet::MAX, current_subset: 0 }
     }
 }
