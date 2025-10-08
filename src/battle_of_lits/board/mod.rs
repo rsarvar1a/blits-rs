@@ -3,6 +3,7 @@ pub(crate) mod foursquare;
 pub(crate) mod indexing;
 pub(crate) mod moves;
 pub(crate) mod neighbours;
+pub(crate) mod pretty;
 pub(crate) mod scores;
 pub(crate) mod zobrist;
 
@@ -79,9 +80,6 @@ pub struct Board<'a> {
     /// Denotes if the game is in the pie rule swap state.
     swapped: bool,
 
-    /// The valid moves on the previous and current turns.
-    valid_moves: (MoveSet, MoveSet),
-
     /// The canonial hash for the gamestate.
     zobrist_hash: u64,
 }
@@ -138,7 +136,6 @@ impl<'a> Board<'a> {
             player_to_move: Player::X,
             score: 0,
             swapped: false,
-            valid_moves: (MoveSet::default(), MoveSet::from_iter(0..NUM_PIECES)),
             zobrist_hash: Board::initial_zobrist_hash(&cells)
         }
     }
@@ -249,7 +246,7 @@ impl<'a> Board<'a> {
     /// Returns a set of valid moves in the current position. Does so using _m a g i c_, computing 99% of
     /// validity checks in constant time and saving n-piece foursquare detection for last.
     pub fn valid_moves(&self, moves: &mut Vec<usize>) {
-        self.valid_moves.1.iter().collect_into(moves);
+        self._compute_valid_moves(moves);
     }
 
     /// Gets a hash for the position. Since the searcher maintains an instance over

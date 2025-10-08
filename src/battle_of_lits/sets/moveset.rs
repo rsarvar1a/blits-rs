@@ -1,5 +1,6 @@
 
 use crate::prelude::{SetOps, NUM_PIECES};
+use itertools::Itertools;
 
 type SubSet = u16;
 const SUBSET_SIZE: usize = size_of::<SubSet>() * 8;
@@ -187,5 +188,62 @@ impl std::iter::Extend<usize> for MoveSet {
         iter.into_iter().for_each(|mv| {
             self.insert(mv);
         });
+    }
+}
+
+impl MoveSet {
+    pub fn union_3(a: &MoveSet, b: &MoveSet, c: &MoveSet) -> MoveSet {
+        MoveSet(std::array::from_fn(|i| a.0[i] | b.0[i] | c.0[i]))
+    }
+
+    pub fn union_4(a: &MoveSet, b: &MoveSet, c: &MoveSet, d: &MoveSet) -> MoveSet {
+        MoveSet(std::array::from_fn(|i| a.0[i] | b.0[i] | c.0[i] | d.0[i]))
+    }
+
+    pub fn union_5(a: &MoveSet, b: &MoveSet, c: &MoveSet, d: &MoveSet, e: &MoveSet) -> MoveSet {
+        MoveSet(std::array::from_fn(|i| a.0[i] | b.0[i] | c.0[i] | d.0[i] | e.0[i]))
+    }
+
+    pub fn union_6(a: &MoveSet, b: &MoveSet, c: &MoveSet, d: &MoveSet, e: &MoveSet, f: &MoveSet) -> MoveSet {
+        MoveSet(std::array::from_fn(|i| a.0[i] | b.0[i] | c.0[i] | d.0[i] | e.0[i] | f.0[i]))
+    }
+
+    pub fn union_7(a: &MoveSet, b: &MoveSet, c: &MoveSet, d: &MoveSet, e: &MoveSet, f: &MoveSet, g: &MoveSet) -> MoveSet {
+        MoveSet(std::array::from_fn(|i| a.0[i] | b.0[i] | c.0[i] | d.0[i] | e.0[i] | f.0[i] | g.0[i]))
+    }
+
+    pub fn union_8(a: &MoveSet, b: &MoveSet, c: &MoveSet, d: &MoveSet, e: &MoveSet, f: &MoveSet, g: &MoveSet, h: &MoveSet) -> MoveSet {
+        MoveSet(std::array::from_fn(|i| a.0[i] | b.0[i] | c.0[i] | d.0[i] | e.0[i] | f.0[i] | g.0[i] | h.0[i]))
+    }
+
+    pub fn union_remainder<'a>(sets: &Vec<&'a MoveSet>) -> MoveSet {
+        match sets.len() {
+            0 => MoveSet::default(),
+            1 => sets[0].clone(),
+            2 => sets[0].union(sets[1]),
+            3 => MoveSet::union_3(sets[0], sets[1], sets[2]),
+            4 => MoveSet::union_4(sets[0], sets[1], sets[2], sets[3]),
+            5 => MoveSet::union_5(sets[0], sets[1], sets[2], sets[3], sets[4]),
+            6 => MoveSet::union_6(sets[0], sets[1], sets[2], sets[3], sets[4], sets[5]),
+            7 => MoveSet::union_7(sets[0], sets[1], sets[2], sets[3], sets[4], sets[5], sets[6]),
+            _ => unreachable!("remainder of 8-ary tuple iterator is always 7 elements or fewer")
+        }
+    }
+
+    /// Vectorized union on an arbitrary collection of MoveSets.
+    pub fn union_many<'a>(iter: impl Iterator<Item = &'a MoveSet>) -> MoveSet {
+        let mut set_iter = iter.into_iter().tuples::<(_,_,_,_,_,_,_,_)>();
+        
+        let mut sets = set_iter
+            .by_ref()
+            .map(|(a, b, c, d, e, f, g, h)| MoveSet::union_8(a, b, c, d, e, f, g, h))
+            .collect::<Vec<_>>();
+        let remainder = set_iter.into_buffer().collect();
+        sets.push(MoveSet::union_remainder(&remainder));
+
+        match sets.len() {
+            1 => sets[0],
+            _ => MoveSet::union_many(sets.iter())
+        }
     }
 }
