@@ -307,6 +307,13 @@ impl CoordSet {
         CoordSet(std::array::from_fn(|i| a.0[i] | b.0[i] | c.0[i] | d.0[i] | e.0[i] | f.0[i] | g.0[i] | h.0[i]))
     }
 
+    /// In-place union of 8 sets into an accumulator
+    #[inline]
+    pub fn union_8_inplace(acc: &mut CoordSet, a: &CoordSet, b: &CoordSet, c: &CoordSet, d: &CoordSet, e: &CoordSet, f: &CoordSet, g: &CoordSet, h: &CoordSet) {
+        acc.0[0] |= a.0[0] | b.0[0] | c.0[0] | d.0[0] | e.0[0] | f.0[0] | g.0[0] | h.0[0];
+        acc.0[1] |= a.0[1] | b.0[1] | c.0[1] | d.0[1] | e.0[1] | f.0[1] | g.0[1] | h.0[1];
+    }
+
     pub fn union_remainder<'a>(sets: &Vec<&'a CoordSet>) -> CoordSet {
         match sets.len() {
             0 => CoordSet::default(),
@@ -321,20 +328,30 @@ impl CoordSet {
         }
     }
 
+    /// In-place union of remainder into an accumulator
+    #[inline]
+    pub fn union_remainder_inplace<'a>(acc: &mut CoordSet, sets: &Vec<&'a CoordSet>) {
+        for set in sets {
+            acc.union_inplace(set);
+        }
+    }
+
     /// Vectorized union on an arbitrary collection of CoordSets.
     pub fn union_many<'a>(iter: impl Iterator<Item = &'a CoordSet>) -> CoordSet {
+        let mut result = CoordSet::default();
         let mut set_iter = iter.into_iter().tuples::<(_,_,_,_,_,_,_,_)>();
-        
-        let mut sets = set_iter
-            .by_ref()
-            .map(|(a, b, c, d, e, f, g, h)| CoordSet::union_8(a, b, c, d, e, f, g, h))
-            .collect::<Vec<_>>();
-        let remainder = set_iter.into_buffer().collect();
-        sets.push(CoordSet::union_remainder(&remainder));
 
-        match sets.len() {
-            1 => sets[0],
-            _ => CoordSet::union_many(sets.iter())
+        // Process in groups of 8 for vectorization, accumulate directly in-place
+        for (a, b, c, d, e, f, g, h) in set_iter.by_ref() {
+            CoordSet::union_8_inplace(&mut result, a, b, c, d, e, f, g, h);
         }
+
+        // Handle remainder in-place
+        let remainder: Vec<&CoordSet> = set_iter.into_buffer().collect();
+        if !remainder.is_empty() {
+            CoordSet::union_remainder_inplace(&mut result, &remainder);
+        }
+
+        result
     }
 }

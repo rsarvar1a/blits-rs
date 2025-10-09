@@ -5,6 +5,10 @@ use std::sync::OnceLock;
 /// Each contains the 4 coords that make up that 2x2 square.
 static FOURSQUARE_CELLS: OnceLock<Box<[[CoordSet; BOARD_SIZE - 1]; BOARD_SIZE - 1]>> = OnceLock::new();
 
+/// Precomputed list of affected foursquare anchors for each cell on the board.
+/// Maps each cell (row, col) to the list of (anchor_row, anchor_col) pairs that need updating.
+static AFFECTED_ANCHORS: OnceLock<Box<[[CoordSet; BOARD_SIZE]; BOARD_SIZE]>> = OnceLock::new();
+
 fn init_foursquare_cells() -> Box<[[CoordSet; BOARD_SIZE - 1]; BOARD_SIZE - 1]> {
     let mut cells = Box::new([[CoordSet::default(); BOARD_SIZE - 1]; BOARD_SIZE - 1]);
 
@@ -21,6 +25,24 @@ fn init_foursquare_cells() -> Box<[[CoordSet; BOARD_SIZE - 1]; BOARD_SIZE - 1]> 
     }
 
     cells
+}
+
+fn init_affected_anchors() -> Box<[[CoordSet; BOARD_SIZE]; BOARD_SIZE]> {
+    let mut anchors = Box::new([[CoordSet::default(); BOARD_SIZE]; BOARD_SIZE]);
+
+    for row in 0..BOARD_SIZE {
+        for col in 0..BOARD_SIZE {
+            let coord = Coord { row, col };
+            for offset in coords::ANCHOR_OFFSETS.iter() {
+                let anchor = &coord + offset;
+                if anchor.in_foursquare_bounds_signed() {
+                   anchors[row][col].insert(&anchor.coerce());
+                }
+            }
+        }
+    }
+
+    anchors
 }
 
 /// A counter for the foursquare rule; no 2X2 box on the board can be fully populated by tiles.
@@ -51,21 +73,15 @@ impl FoursquareCounter {
     /// coordinate is (0, 0) then the only valid foursquare is the one anchored at 0,0, not (-1, -1), (-1, 0) or (0, -1).
     #[inline]
     pub fn update_unchecked(&mut self, coord: &Coord, tile: Option<Tile>) -> () {
-        let op = match tile {
-            Some(_) => "incr",
-            None => "decr",
-        };
+        let delta: i8 = if tile.is_some() { 1 } else { -1 };
+        let anchors = AFFECTED_ANCHORS.get_or_init(init_affected_anchors);
 
-        coords::ANCHOR_OFFSETS.iter().for_each(|offset| {
-            let anchor = coord + offset;
-            if anchor.in_foursquare_bounds_signed() {
-                let idx = anchor.coerce();
-                match op {
-                    "incr" => self.incr_inplace(&idx),
-                    _ => self.decr_inplace(&idx),
-                };
+        unsafe {
+            for Coord { row: anchor_row, col: anchor_col } in anchors.get_unchecked(coord.row).get_unchecked(coord.col).iter() {
+                let el = self.0.get_unchecked_mut(anchor_row).get_unchecked_mut(anchor_col);
+                *el = (*el as i8 + delta) as u8;
             }
-        });
+        }
     }
 
     fn _check_for(&self, coord: &Coord, v: u8) -> bool {
