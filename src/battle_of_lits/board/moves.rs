@@ -141,7 +141,7 @@ impl<'a> Board<'a> {
             }).collect()
     }
 
-    pub fn _compute_valid_moves<T: Extend<usize>>(&self, moves: &mut T) {
+    pub fn _compute_valid_moves(&self, moves: &mut Vec<usize>) {
         match self.history.len() {
             0 => { 
                 moves.extend(0..NUM_PIECES);
@@ -176,6 +176,9 @@ impl<'a> Board<'a> {
         valid_moves.difference_inplace(&history); // remove played moves
 
         let protected_uncovered = self.protected.difference(&self.cover);
+
+        // Reserve capacity to avoid reallocations during collect_into
+        moves.reserve(valid_moves.len());
 
         valid_moves
             .iter().filter(|&candidate| {
@@ -224,6 +227,9 @@ impl<'a> Board<'a> {
         valid_moves.difference_inplace(&history); // remove played moves
 
         let protected_uncovered = self.protected.difference(&self.cover);
+
+        // Reserve capacity to avoid reallocations during collect_into
+        moves.reserve(valid_moves.len());
 
         valid_moves
             .iter().filter(|&p| {
