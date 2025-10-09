@@ -54,7 +54,7 @@ impl<'a> Board<'a> {
         coord: &Coord,
         lits: Option<Tile>,
     ) -> &mut Self {
-        let [cur, prev] = {
+        let [cur, _prev] = {
             let r = self.get_mut_unchecked(coord);
             let prev = r.lits_value();
             *r = r.with_lits(lits);
@@ -64,7 +64,7 @@ impl<'a> Board<'a> {
             Some(_) => -1, // setting a tile; remove this symbol from score
             None    =>  1, // unsetting a tile; add this symbol to score
         };
-        self.edge_mask.update_unchecked(coord, cur, prev);
+        // we ended up never using the edge counter...
         self.foursquare_mask.update_unchecked(coord, cur);
         self
     }

@@ -160,6 +160,15 @@ impl PieceMap {
             shadowsets.assume_init()
         };
 
+        let pieces_by_type = {
+            let mut sets = [MoveSet::default(); 4];
+            for idx in 0..NUM_PIECES {
+                let tile = forward[idx].kind;
+                sets[tile as usize].insert(idx);
+            }
+            sets
+        };
+
         PieceMap {
             forward,
             reverse,
@@ -173,7 +182,8 @@ impl PieceMap {
             isolation_potential,
             connectivity_dependencies,
             isolation_shadows,
-            shadowsets
+            shadowsets,
+            pieces_by_type
         }
     }
 }

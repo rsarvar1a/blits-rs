@@ -99,17 +99,18 @@ impl FoursquareCounter {
     pub fn protected_cells(&self) -> CoordSet {
         let cells = FOURSQUARE_CELLS.get_or_init(init_foursquare_cells);
 
-        let mut protected_sets = Vec::with_capacity(81);
+        // Directly accumulate union instead of allocating Vec
+        let mut result = CoordSet::default();
 
         for row in 0..(BOARD_SIZE - 1) {
             for col in 0..(BOARD_SIZE - 1) {
                 if self.0[row][col] >= 3 {
-                    protected_sets.push(&cells[row][col]);
+                    result.union_inplace(&cells[row][col]);
                 }
             }
         }
 
-        CoordSet::union_many(protected_sets.into_iter())
+        result
     }
 }
 

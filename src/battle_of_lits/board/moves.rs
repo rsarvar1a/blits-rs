@@ -175,6 +175,13 @@ impl<'a> Board<'a> {
 
         valid_moves.difference_inplace(&history); // remove played moves
 
+        // Filter out pieces not in bag using set operations instead of per-candidate checks
+        for tile in Tile::all() {
+            if unsafe { *self.piece_bag.get_unchecked(tile as usize) == 0 } {
+                valid_moves.difference_inplace(self.piecemap.pieces_of_type(tile));
+            }
+        }
+
         let protected_uncovered = self.protected.difference(&self.cover);
 
         // Reserve capacity to avoid reallocations during collect_into
@@ -182,11 +189,6 @@ impl<'a> Board<'a> {
 
         valid_moves
             .iter().filter(|&candidate| {
-                let kind = self.piecemap.get_kind(candidate);
-                if unsafe { *self.piece_bag.get_unchecked(kind as usize) == 0 } {
-                    return false;
-                }
-
                 !foursquare::violates(self.piecemap.coordset(candidate), &protected_uncovered)
             }).collect_into(moves);
     }
@@ -226,6 +228,13 @@ impl<'a> Board<'a> {
         
         valid_moves.difference_inplace(&history); // remove played moves
 
+        // Filter out pieces not in bag using set operations instead of per-candidate checks
+        for tile in Tile::all() {
+            if unsafe { *self.piece_bag.get_unchecked(tile as usize) == 0 } {
+                valid_moves.difference_inplace(self.piecemap.pieces_of_type(tile));
+            }
+        }
+
         let protected_uncovered = self.protected.difference(&self.cover);
 
         // Reserve capacity to avoid reallocations during collect_into
@@ -233,12 +242,6 @@ impl<'a> Board<'a> {
 
         valid_moves
             .iter().filter(|&p| {
-                // we drop pieces not in the bag.
-                let kind = self.piecemap.get_kind(p);
-                if unsafe { *self.piece_bag.get_unchecked(kind as usize) == 0 } {
-                    return false;
-                }
-
                 if self.noise(p) < 3 {
                     return false;
                 }
