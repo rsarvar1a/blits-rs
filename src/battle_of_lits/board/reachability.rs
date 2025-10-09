@@ -54,23 +54,30 @@ impl<'a> Board<'a> {
 
         // Fallback: traditional flood fill approach
         let mut reachable_from_network = CoordSet::default();
-        let mut stack: Vec<Coord> = self.neighbours.iter().collect();
-        
+
+        // Preallocate stack with estimated capacity (typical neighbour count is ~30-40)
+        let mut stack = Vec::with_capacity(50);
+        stack.extend(self.neighbours.iter());
+
+        // Precompute set of invalid cells (covered or already unreachable)
+        let invalid = self.cover.union(&self.unreachable);
+
         while let Some(coord) = stack.pop() {
-            if reachable_from_network.contains(&coord) || self.cover.contains(&coord) {
+            // Skip if already visited or invalid
+            if reachable_from_network.contains(&coord) || invalid.contains(&coord) {
                 continue;
             }
-            
+
             reachable_from_network.insert(&coord);
-            
+
             // Add uncovered orthogonal neighbors
             for offset in coords::ORTHOGONAL_OFFSETS.iter() {
                 let neighbor = coord + offset;
                 if neighbor.in_bounds_signed() {
                     let neighbor_coord = neighbor.coerce();
-                    if !self.cover.contains(&neighbor_coord) && 
-                       !reachable_from_network.contains(&neighbor_coord) &&
-                       !self.unreachable.contains(&neighbor_coord) {
+                    // Single contains check instead of 3
+                    if !invalid.contains(&neighbor_coord) &&
+                       !reachable_from_network.contains(&neighbor_coord) {
                         stack.push(neighbor_coord);
                     }
                 }
@@ -92,19 +99,14 @@ impl<'a> Board<'a> {
     
     /// Get a limited search area around existing pieces to avoid full board scan.
     fn get_limited_search_area(&self) -> CoordSet {
-        let mut search_area = CoordSet::default();
-        search_area.union_inplace(&self.neighbours);
+        // Start with neighbours (1-step)
+        let mut search_area = self.neighbours.clone();
 
-        // Add all neighbors of neighbors (2-step radius)
-        for coord in self.neighbours.iter() {            
-            for offset in coords::ORTHOGONAL_OFFSETS.iter() {
-                let neighbor = coord + offset;
-                if neighbor.in_bounds_signed() {
-                    search_area.insert(&neighbor.coerce());
-                }
-            }
+        // Expand to 2-step radius using precomputed neighbour sets
+        for coord in self.neighbours.iter() {
+            search_area.union_inplace(self.piecemap.coord_neighbours(&coord));
         }
-        
+
         search_area
     }
 

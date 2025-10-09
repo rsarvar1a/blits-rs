@@ -68,6 +68,10 @@ pub struct PieceMap {
     /// Shadow application set: union of coordset and neighbours for fast shadow anchor checks.
     /// Precomputed as coordset(id) ∪ neighbours(id) for each piece.
     shadowsets: Box<[CoordSet; NUM_PIECES]>,
+
+    /// Sets of all pieces by tile type (L, I, T, S).
+    /// Used for fast filtering by piece bag availability.
+    pieces_by_type: [MoveSet; 4],
 }
 
 impl PieceMap {
@@ -127,6 +131,11 @@ impl PieceMap {
         unsafe {
             self.shadowsets.get_unchecked(id)
         }
+    }
+
+    /// Gets the set of all pieces of a given tile type.
+    pub fn pieces_of_type(&self, tile: Tile) -> &MoveSet {
+        &self.pieces_by_type[tile as usize]
     }
 
     /// Gets the interaction between two pieces by ID.
