@@ -1,5 +1,7 @@
 use super::*;
 
+const UNREACHABILITY_LOWER_BOUND: usize = 3;
+
 impl<'a> Board<'a> {
     /// Updates the unreachable cells set after a piece has been placed.
     /// 
@@ -7,7 +9,7 @@ impl<'a> Board<'a> {
     /// due to connectivity constraints. Optimized for minimal overhead.
     pub(super) fn update_unreachable_cells(&mut self) -> () {
         // Early game optimization: skip expensive analysis if board is sparse
-        if self.cover.len() < 6 {
+        if self.cover.len() < UNREACHABILITY_LOWER_BOUND {
             return;
         }
         
