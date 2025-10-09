@@ -64,6 +64,10 @@ pub struct PieceMap {
     /// Isolation shadow maps: precomputed regions that become isolated when this piece
     /// is placed at strategic positions. Maps anchor positions to isolated regions.
     isolation_shadows: Box<[Vec<(Coord, CoordSet)>; NUM_PIECES]>,
+
+    /// Shadow application set: union of coordset and neighbours for fast shadow anchor checks.
+    /// Precomputed as coordset(id) ∪ neighbours(id) for each piece.
+    shadowsets: Box<[CoordSet; NUM_PIECES]>,
 }
 
 impl PieceMap {
@@ -115,6 +119,13 @@ impl PieceMap {
     pub fn isolation_shadows(&self, id: usize) -> &Vec<(Coord, CoordSet)> {
         unsafe {
             self.isolation_shadows.get_unchecked(id)
+        }
+    }
+
+    /// Gets the shadowset (coordset ∪ neighbours) for this piece.
+    pub fn shadowset(&self, id: usize) -> &CoordSet {
+        unsafe {
+            self.shadowsets.get_unchecked(id)
         }
     }
 

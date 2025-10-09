@@ -150,11 +150,21 @@ impl PieceMap {
             isolation_shadows.assume_init()
         };
 
-        PieceMap { 
-            forward, 
-            reverse, 
-            associations, 
-            associations_specific, 
+        let shadowsets = unsafe {
+            let mut shadowsets: Box<MaybeUninit<[CoordSet; NUM_PIECES]>> = Box::new_zeroed();
+            (0..NUM_PIECES).for_each(|idx| {
+                let mut shadowset = selfs[idx].clone();
+                shadowset.union_inplace(&neighbours[idx]);
+                *shadowsets.assume_init_mut().get_unchecked_mut(idx) = shadowset;
+            });
+            shadowsets.assume_init()
+        };
+
+        PieceMap {
+            forward,
+            reverse,
+            associations,
+            associations_specific,
             coord_neighbours,
             neighbours,
             selfs,
@@ -162,7 +172,8 @@ impl PieceMap {
             bridges,
             isolation_potential,
             connectivity_dependencies,
-            isolation_shadows
+            isolation_shadows,
+            shadowsets
         }
     }
 }

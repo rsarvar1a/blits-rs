@@ -1,18 +1,35 @@
 use crate::battle_of_lits::prelude::*;
+use std::sync::OnceLock;
+
+/// Precomputed CoordSets for each foursquare anchor position.
+/// Each contains the 4 coords that make up that 2x2 square.
+static FOURSQUARE_CELLS: OnceLock<Box<[[CoordSet; BOARD_SIZE - 1]; BOARD_SIZE - 1]>> = OnceLock::new();
+
+fn init_foursquare_cells() -> Box<[[CoordSet; BOARD_SIZE - 1]; BOARD_SIZE - 1]> {
+    let mut cells = Box::new([[CoordSet::default(); BOARD_SIZE - 1]; BOARD_SIZE - 1]);
+
+    for row in 0..(BOARD_SIZE - 1) {
+        for col in 0..(BOARD_SIZE - 1) {
+            let mut set = CoordSet::default();
+            // 2x2 square with top-left at (row, col)
+            set.insert(&Coord { row, col });
+            set.insert(&Coord { row, col: col + 1 });
+            set.insert(&Coord { row: row + 1, col });
+            set.insert(&Coord { row: row + 1, col: col + 1 });
+            cells[row][col] = set;
+        }
+    }
+
+    cells
+}
 
 /// A counter for the foursquare rule; no 2X2 box on the board can be fully populated by tiles.
 ///
 /// We keep track of all 81 foursquares using 3 bits each, using 256 bits.
 #[derive(Clone, Copy, Debug, Default)]
-pub struct FoursquareCounter([[u8; BOARD_SIZE - 1]; BOARD_SIZE - 1]);
+pub struct FoursquareCounter(pub [[u8; BOARD_SIZE - 1]; BOARD_SIZE - 1]);
 
 impl FoursquareCounter {
-    /// Determines if the given tile violates the foursquare rule.
-    #[inline]
-    pub fn any(&self, coord: &Coord) -> bool {
-        self._check_for(coord, 4)
-    }
-
     /// Determines if _placing_ the given tile would violate the foursquare rule.
     #[inline]
     pub fn three(&self, coord: &Coord) -> bool {
@@ -65,15 +82,39 @@ impl FoursquareCounter {
 
     /// Increments the given counter in-place.
     #[inline]
-    fn incr_inplace(&mut self, coord: &Coord) -> () {
+    pub fn incr_inplace(&mut self, coord: &Coord) -> () {
         let el = unsafe { self.0.get_unchecked_mut(coord.row).get_unchecked_mut(coord.col) };
         *el += 1;
     }
 
     /// Decrements the given counter in-place.
     #[inline]
-    fn decr_inplace(&mut self, coord: &Coord) -> () {
+    pub fn decr_inplace(&mut self, coord: &Coord) -> () {
         let el = unsafe { self.0.get_unchecked_mut(coord.row).get_unchecked_mut(coord.col) };
         *el -= 1;
     }
+
+    /// Returns a CoordSet of all cells that are protected by foursquare-3.
+    /// These are cells where placing a tile would complete a foursquare.
+    pub fn protected_cells(&self) -> CoordSet {
+        let cells = FOURSQUARE_CELLS.get_or_init(init_foursquare_cells);
+
+        let mut protected_sets = Vec::with_capacity(81);
+
+        for row in 0..(BOARD_SIZE - 1) {
+            for col in 0..(BOARD_SIZE - 1) {
+                if self.0[row][col] >= 3 {
+                    protected_sets.push(&cells[row][col]);
+                }
+            }
+        }
+
+        CoordSet::union_many(protected_sets.into_iter())
+    }
+}
+
+/// Checks if placing a piece would violate foursquare.
+#[inline]
+pub fn violates(piece_coords: &CoordSet, protected: &CoordSet) -> bool {
+    protected.intersects(piece_coords)
 }

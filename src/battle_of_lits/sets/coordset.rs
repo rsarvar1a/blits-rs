@@ -97,9 +97,10 @@ impl SetOps<&Coord, Coord> for CoordSet {
     }
 
     fn intersect(&self, other: &Self) -> Self {
-        let mut s = self.clone();
-        s.intersect_inplace(other);
-        s
+        CoordSet([
+            self.0[0] & other.0[0],
+            self.0[1] & other.0[1],
+        ])
     }
 
     fn intersect_inplace(&mut self, other: &Self) -> &mut Self {
@@ -113,9 +114,10 @@ impl SetOps<&Coord, Coord> for CoordSet {
     }
 
     fn union(&self, other: &Self) -> Self {
-        let mut s = self.clone();
-        s.union_inplace(other);
-        s
+        CoordSet([
+            self.0[0] | other.0[0],
+            self.0[1] | other.0[1],
+        ])
     }
 
     fn union_inplace(&mut self, other: &Self) -> &mut Self {
@@ -125,9 +127,10 @@ impl SetOps<&Coord, Coord> for CoordSet {
     }
 
     fn difference(&self, other: &Self) -> Self {
-        let mut s = self.clone();
-        s.difference_inplace(other);
-        s
+        CoordSet([
+            self.0[0] & !other.0[0],
+            self.0[1] & !other.0[1],
+        ])
     }
 
     fn difference_inplace(&mut self, other: &Self) -> &mut Self {

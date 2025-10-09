@@ -59,8 +59,7 @@ pub struct Board<'a> {
     /// we can quickly obtain a moveset for conflict resolution operations like move validity.
     history: Vec<usize>,
 
-    /// Set of played piece IDs for O(1) lookup instead of O(n) Vec::contains.
-    /// Updated incrementally in play_unchecked and undo operations.
+    /// A set of played pieces, as a complement to self.history.
     played: MoveSet,
 
     /// A collection of _all_ neighbouring cells to pieces on this board, obviously excluding covered ones.
@@ -69,10 +68,16 @@ pub struct Board<'a> {
     neighbours: CoordSet,
 
     /// A collection of cells that are mathematically unreachable due to constraints.
-    /// 
+    ///
     /// Once a cell becomes unreachable (due to connectivity, foursquare, or shape constraints),
     /// it remains unreachable for the rest of the game.
     unreachable: CoordSet,
+
+    /// Cached set of cells protected by foursquare. We deliberately include covered cells here.
+    protected: CoordSet,
+
+    /// Set of cells that are implicated in scoring.
+    symbols: CoordSet,
 
     /// The number of pieces remaining in each type.
     piece_bag: [usize; 4],
@@ -133,8 +138,18 @@ impl<'a> Board<'a> {
             }
         };
         
-        Board { 
-            cells, 
+        // Build symbols set from initial grid.
+        let mut symbols = CoordSet::default();
+        for row in 0..BOARD_SIZE {
+            for col in 0..BOARD_SIZE {
+                if cells.0[row][col].cell_value().is_some() {
+                    symbols.insert(&Coord { row, col });
+                }
+            }
+        }
+
+        Board {
+            cells,
             cover: CoordSet::default(),
             edge_mask: EdgeCounter::default(),
             foursquare_mask: FoursquareCounter::default(),
@@ -142,6 +157,8 @@ impl<'a> Board<'a> {
             played: MoveSet::default(),
             neighbours: CoordSet::default(),
             unreachable: CoordSet::default(),
+            protected: CoordSet::default(),
+            symbols,
             piece_bag: [PIECES_PER_KIND; 4],
             piecemap,
             player_to_move: Player::X,

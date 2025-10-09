@@ -83,25 +83,18 @@ impl<'a> Board<'a> {
     /// Check for unreachable cells in a limited area around recent activity.
     fn check_limited_unreachable_area(&mut self, reachable: &CoordSet) -> () {
         // Only check cells within 2 steps of existing pieces
-        let search_area = self.get_limited_search_area();
-        
-        for coord in search_area.iter() {
-            if !self.cover.contains(&coord) && 
-               !reachable.contains(&coord) && 
-               !self.unreachable.contains(&coord) {
-                self.unreachable.insert(&coord);
-            }
-        }
+        let mut search_area = self.get_limited_search_area();
+        search_area.difference_inplace(&self.cover).difference_inplace(reachable);
+        self.unreachable.union_inplace(&search_area);
     }
     
     /// Get a limited search area around existing pieces to avoid full board scan.
     fn get_limited_search_area(&self) -> CoordSet {
         let mut search_area = CoordSet::default();
-        
-        // Add all neighbors and their neighbors (2-step radius)
-        for coord in self.neighbours.iter() {
-            search_area.insert(&coord);
-            
+        search_area.union_inplace(&self.neighbours);
+
+        // Add all neighbors of neighbors (2-step radius)
+        for coord in self.neighbours.iter() {            
             for offset in coords::ORTHOGONAL_OFFSETS.iter() {
                 let neighbor = coord + offset;
                 if neighbor.in_bounds_signed() {
@@ -134,16 +127,9 @@ impl<'a> Board<'a> {
         // Check only the immediate area around the new piece for isolation
         // This is much faster than full board analysis
         if let Some(&last_move) = self.history.last() {
-            let piece_neighbors = self.piecemap.neighbours(last_move);
-            
-            for coord in piece_neighbors.iter() {
-                if !self.cover.contains(&coord) && 
-                    !self.neighbours.contains(&coord) &&
-                    !self.unreachable.contains(&coord) {
-                    // This cell is not reachable from the current network
-                    self.unreachable.insert(&coord);
-                }
-            }
+            let mut piece_neighbors = self.piecemap.neighbours(last_move).clone();
+            piece_neighbors.difference_inplace(&self.cover).difference_inplace(&self.neighbours);
+            self.unreachable.union_inplace(&piece_neighbors);
         }
     }
 
@@ -176,51 +162,28 @@ impl<'a> Board<'a> {
     }
 
     /// Marks regions as unreachable based on isolation shadow maps.
-    /// 
+    ///
     /// Uses precomputed shadow maps to quickly identify regions that become
     /// isolated when this piece is placed at strategic positions.
     fn mark_shadow_unreachable(&mut self, piece_id: usize) -> () {
         let shadows = self.piecemap.isolation_shadows(piece_id);
-        
+
         // Early exit if no shadows
         if shadows.is_empty() {
             return;
         }
-        
-        let piece_coords = self.piecemap.coordset(piece_id);
-        
+
+        let shadowset = self.piecemap.shadowset(piece_id);
+
         // Check each precomputed shadow for this piece placement
         for &(anchor, ref isolated_region) in shadows.iter() {
-            // Verify the shadow is actually created by checking if the anchor
-            // position aligns with where this piece was placed
-            if self.shadow_applies_to_placement(piece_coords, &anchor) {
+            // Verify the shadow is actually created using precomputed shadowset
+            if shadowset.contains(&anchor) {
                 // Mark all cells in the isolated region as unreachable
-                for coord in isolated_region.iter() {
-                    if !self.cover.contains(&coord) && !self.neighbours.contains(&coord) {
-                        self.unreachable.insert(&coord);
-                    }
-                }
+                let mut region = isolated_region.clone();
+                region.difference_inplace(&self.cover).difference_inplace(&self.neighbours);
+                self.unreachable.union_inplace(&region);
             }
         }
-    }
-
-    /// Determines if a shadow map applies to the current piece placement.
-    fn shadow_applies_to_placement(&self, piece_coords: &CoordSet, anchor: &Coord) -> bool {
-        // Check if the anchor position is adjacent to or within the placed piece
-        if piece_coords.contains(anchor) {
-            return true;
-        }
-        
-        // Check if anchor is adjacent to the piece
-        for coord in piece_coords.iter() {
-            for offset in coords::ORTHOGONAL_OFFSETS.iter() {
-                let neighbor = coord + offset;
-                if neighbor.in_bounds_signed() && neighbor.coerce() == *anchor {
-                    return true;
-                }
-            }
-        }
-        
-        false
     }
 }
