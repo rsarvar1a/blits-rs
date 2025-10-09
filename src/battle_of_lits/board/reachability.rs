@@ -1,6 +1,6 @@
 use super::*;
 
-const UNREACHABILITY_LOWER_BOUND: usize = 3;
+const UNREACHABILITY_LOWER_BOUND: usize = 2;
 
 impl<'a> Board<'a> {
     /// Updates the unreachable cells set after a piece has been placed.
