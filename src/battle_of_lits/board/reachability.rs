@@ -143,23 +143,23 @@ impl<'a> Board<'a> {
     /// unreachable when the blocking piece is placed.
     fn mark_dependency_unreachable(&mut self, blocking_piece_id: usize) -> () {
         let dependencies = self.piecemap.connectivity_dependencies(blocking_piece_id);
-        
+
         // Early exit if no dependencies
         if dependencies.is_empty() {
             return;
         }
-        
+
         // Use inplace difference to avoid allocation
         let mut available_dependencies = dependencies.clone();
         available_dependencies.difference_inplace(&self.played);
-        
+
         for dependent_piece_id in available_dependencies.iter() {
             // Skip if any cells of the dependent piece are already covered
             let dependent_coords = self.piecemap.coordset(dependent_piece_id);
             if dependent_coords.intersects(&self.cover) {
                 continue;
             }
-            
+
             // Mark all cells of the dependent piece as unreachable - use union_inplace
             self.unreachable.union_inplace(dependent_coords);
         }

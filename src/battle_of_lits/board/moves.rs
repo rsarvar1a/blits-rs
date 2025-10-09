@@ -64,6 +64,11 @@ impl<'a> Board<'a> {
             _     => { /* check manually */},
         };
 
+        // Fast early return: if all reachable cells are covered, no moves exist
+        if self.unreachable.len() == 100 {
+            return false;
+        }
+
         let history: MoveSet = self.history.iter().collect();
         let mut valid_moves: MoveSet = MoveSet::default();
 
@@ -81,14 +86,16 @@ impl<'a> Board<'a> {
 
         valid_moves.difference_inplace(&history); // remove played moves
 
+        // Filter out pieces not in bag using set operations instead of per-candidate checks
+        for tile in Tile::all() {
+            if unsafe { *self.piece_bag.get_unchecked(tile as usize) == 0 } {
+                valid_moves.difference_inplace(self.piecemap.pieces_of_type(tile));
+            }
+        }
+
         let protected_uncovered = self.protected.difference(&self.cover);
 
         valid_moves.iter().any(|candidate| {
-            let kind = self.piecemap.get_kind(candidate);
-            if unsafe { *self.piece_bag.get_unchecked(kind as usize) == 0 } {       // not even one adjacent piece on board
-                return false;
-            }
-
             // we also drop pieces that violate foursquare using protected cell check
             !foursquare::violates(self.piecemap.coordset(candidate), &protected_uncovered)
         })
@@ -144,11 +151,13 @@ impl<'a> Board<'a> {
     pub fn _compute_valid_moves(&self, moves: &mut Vec<usize>) {
         match self.history.len() {
             0 => { 
+                moves.reserve(1292);
                 moves.extend(0..NUM_PIECES);
                 return;
             },
             1 => { 
                 let mvs = self.piecemap.with_interaction(self.history[0], Interaction::Adjacent);
+                moves.reserve(mvs.len());
                 moves.extend(mvs.iter());
                 if !self.swapped {
                     moves.extend(Some(NULL_MOVE));
@@ -157,7 +166,7 @@ impl<'a> Board<'a> {
             },
             _ => { /* don't return; compute properly! */ },
         };
-
+        
         let history: MoveSet = self.history.iter().collect();
         let mut valid_moves: MoveSet = MoveSet::default();
 
