@@ -1,4 +1,5 @@
 use crate::battle_of_lits::prelude::*;
+use crate::battle_of_lits::board::foursquare;
 
 const GAME_LENGTH_LOWER_BOUND: usize = 8;
 
@@ -19,9 +20,12 @@ impl<'a> Board<'a> {
             self.neighbours
                 .union_inplace(self.piecemap.neighbours(id)) // add all the new neighbours
                 .difference_inplace(&self.cover); // remove anything conflicting (either in the new neighbours, or from the just-played piece)
-            
+
             // Update unreachable cells after piece placement
             self.update_unreachable_cells();
+
+            // Update cached protected cells for movegen and evaluator
+            self.protected = self.foursquare_mask.protected_cells();
         }
 
         { // meta information
@@ -77,20 +81,16 @@ impl<'a> Board<'a> {
 
         valid_moves.difference_inplace(&history); // remove played moves
 
+        let protected_uncovered = self.protected.difference(&self.cover);
+
         valid_moves.iter().any(|candidate| {
             let kind = self.piecemap.get_kind(candidate);
             if unsafe { *self.piece_bag.get_unchecked(kind as usize) == 0 } {       // not even one adjacent piece on board
                 return false;
             }
 
-            // we also drop pieces that violate foursquare. to do this, we clone the historical
-            // foursquare, simulate the piece, and check all of the refcounts.
-            let mut foursquare = self.foursquare_mask.clone();
-            let piece = self.piecemap.get_piece(candidate);
-            piece.real_coords_lazy().for_each(|c| {
-                foursquare.update_unchecked(&c.coerce(), Some(piece.kind));
-            });
-            !piece.real_coords_lazy().any(|c| foursquare.any(&c.coerce()))                // playing this move violates foursquare
+            // we also drop pieces that violate foursquare using protected cell check
+            !foursquare::violates(self.piecemap.coordset(candidate), &protected_uncovered)
         })
     }
 
@@ -126,6 +126,9 @@ impl<'a> Board<'a> {
 
         valid_moves.difference_inplace(&history); // remove played moves
 
+        // Compute protected cells once for all candidate moves
+        let protected_uncovered = self.protected.difference(&self.cover);
+
         valid_moves
             .iter().filter(|&p| {
                 // we drop pieces not in the bag.
@@ -133,14 +136,8 @@ impl<'a> Board<'a> {
                 if unsafe { *self.piece_bag.get_unchecked(kind as usize) == 0 } {
                     return false;
                 }
-                // we also drop pieces that violate foursquare. to do this, we clone the historical
-                // foursquare, simulate the piece, and check all of the refcounts.
-                let mut foursquare = self.foursquare_mask.clone();
-                let piece = self.piecemap.get_piece(p);
-                piece.real_coords_lazy().for_each(|c| {
-                    foursquare.update_unchecked(&c.coerce(), Some(piece.kind));
-                });
-                !piece.real_coords_lazy().any(|c| foursquare.any(&c.coerce()))
+                // we also drop pieces that violate foursquare using protected cell check
+                !foursquare::violates(self.piecemap.coordset(p), &protected_uncovered)
             }).collect()
     }
 
@@ -178,6 +175,8 @@ impl<'a> Board<'a> {
 
         valid_moves.difference_inplace(&history); // remove played moves
 
+        let protected_uncovered = self.protected.difference(&self.cover);
+
         valid_moves
             .iter().filter(|&candidate| {
                 let kind = self.piecemap.get_kind(candidate);
@@ -185,12 +184,7 @@ impl<'a> Board<'a> {
                     return false;
                 }
 
-                let mut foursquare = self.foursquare_mask.clone();
-                let piece = self.piecemap.get_piece(candidate);
-                piece.real_coords_lazy().for_each(|c| {
-                    foursquare.update_unchecked(&c.coerce(), Some(piece.kind));
-                });
-                !piece.real_coords_lazy().any(|c| foursquare.any(&c.coerce()))                // this piece would violate foursquare
+                !foursquare::violates(self.piecemap.coordset(candidate), &protected_uncovered)
             }).collect_into(moves);
     }
 
@@ -229,6 +223,8 @@ impl<'a> Board<'a> {
         
         valid_moves.difference_inplace(&history); // remove played moves
 
+        let protected_uncovered = self.protected.difference(&self.cover);
+
         valid_moves
             .iter().filter(|&p| {
                 // we drop pieces not in the bag.
@@ -241,14 +237,8 @@ impl<'a> Board<'a> {
                     return false;
                 }
 
-                // we also drop pieces that violate foursquare. to do this, we clone the historical
-                // foursquare, simulate the piece, and check all of the refcounts.
-                let mut foursquare = self.foursquare_mask.clone();
-                let piece = self.piecemap.get_piece(p);
-                piece.real_coords_lazy().for_each(|c| {
-                    foursquare.update_unchecked(&c.coerce(), Some(piece.kind));
-                });
-                !piece.real_coords_lazy().any(|c| foursquare.any(&c.coerce()))
+                // we also drop pieces that violate foursquare using protected cell check
+                !foursquare::violates(self.piecemap.coordset(p), &protected_uncovered)
             }).collect_into(moves);
     }
 }
