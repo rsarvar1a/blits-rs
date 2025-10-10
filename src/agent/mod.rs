@@ -152,7 +152,7 @@ impl AgentConfig {
 
     /// Produces an agent.
     pub fn get_agent(&self, piecemap: &'static PieceMap) -> BLITSAgent {
-        match self.selected {
+        let mut agent = match self.selected {
             WhichStrategy::Negamax => BLITSAgent { 
                 board: Board::new(None, piecemap), 
                 strategy: Box::new(minimax::ParallelSearch::new(Evaluator::default(), self.search_opts, self.parallel_opts)),
@@ -169,6 +169,8 @@ impl AgentConfig {
                 past_boards: vec![], 
                 future: vec![]
             }
-        }
+        };
+        agent.set_max_depth(20);
+        agent
     }
 }
