@@ -32,7 +32,9 @@ See [docs/commands.md](docs/commands.md) for more information on interacting wit
         - returns 0 in all non-terminal states
 
 - current best effort: 
-    - $3.169\times10^7$ nodes per second
-    - evaluator: greedy
-        - updates the score each time a Tile is set/unset on the board
-        - returns the current "visible" score in constant time
+    - $2.204\times10^7$ nodes per second
+    - evaluator: connectivity
+        - applies a multifaceted heuristic approach, including:
+            - graph connectivity (the threat on the board in terms of region draining)
+            - protected cells (guaranteed scoring)
+            - unreachability (regions that are mathematically impossible to reach for the rest of the game)
