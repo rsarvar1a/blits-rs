@@ -57,11 +57,11 @@ impl<'a> Board<'a> {
         }
 
         material +
-        500 * unreachable_score +
-        100 * security +
-        -25 * threat +
-         15 * connectivity +
-        -10 * constraint
+         50 * unreachable_score +
+         25 * security +
+        -15 * threat +
+         10 * connectivity +
+         -5 * constraint
     }
 
 }
